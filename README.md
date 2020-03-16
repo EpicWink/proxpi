@@ -1,5 +1,5 @@
 # proxpi
-Local PyPI mirror cache
+PyPI caching mirror
 
 * Host a proxy PyPI mirror server with caching
 * Use extra index URLs

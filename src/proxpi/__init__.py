@@ -1,4 +1,4 @@
-"""Local PyPI mirror cache."""
+"""PyPI caching mirror."""
 
 from . import routes
 from .config import app
