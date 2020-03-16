@@ -1,4 +1,4 @@
-"""Local PyPI mirror cache."""
+"""Server routes."""
 
 from urllib import parse as urllib_parse
 

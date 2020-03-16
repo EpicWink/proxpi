@@ -1,4 +1,4 @@
-"""Local PyPI mirror cache."""
+"""Server configuration."""
 
 import os
 

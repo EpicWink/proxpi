@@ -1,4 +1,7 @@
-"""Local PyPI mirror cache."""
+"""Server data.
+
+Includes package index interfacing and caching.
+"""
 
 import os
 import re
