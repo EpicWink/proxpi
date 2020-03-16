@@ -19,6 +19,7 @@ import requests
 from . import config
 
 _sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
+_name_normalise_re = re.compile("[-_.]+")
 File = collections.namedtuple("File", ("name", "url", "sha"))
 
 
@@ -51,7 +52,8 @@ class _IndexCache:
 
         soup = bs4.BeautifulSoup(response.text)
         for link in soup.find_all("a"):
-            self._index[link.string] = link["href"]
+            name = _name_normalise_re.sub("-", link.string).lower()
+            self._index[name] = link["href"]
 
     def list_packages(self) -> t.Iterable[str]:
         self._list_packages()
