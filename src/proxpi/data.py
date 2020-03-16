@@ -11,6 +11,7 @@ import tempfile
 import threading
 import collections
 import typing as t
+import logging as lg
 from urllib import parse as urllib_parse
 
 import bs4
@@ -18,6 +19,7 @@ import requests
 
 from . import config
 
+logger = lg.getLogger(__name__)
 _sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
 _name_normalise_re = re.compile("[-_.]+")
 File = collections.namedtuple("File", ("name", "url", "sha"))
@@ -50,6 +52,7 @@ class _IndexCache:
 
     def __del__(self):
         if os.path.isdir(self._package_dir):
+            logger.debug(f"Deleting '{self._package_dir}'")
             shutil.rmtree(self._package_dir)
 
     def _list_packages(self):
@@ -57,6 +60,7 @@ class _IndexCache:
         if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
             return
 
+        logger.info(f"Listing packages in index '{self.index_url}'")
         response = requests.get(self.index_url)
         self._index_t = time.monotonic()
 
@@ -85,6 +89,7 @@ class _IndexCache:
         if package_name not in self._index:
             raise NotFound(package_name)
 
+        logger.debug(f"Listing files in package '{package_name}'")
         package_url = self._index[package_name]
         url = urllib_parse.urljoin(self.index_url, package_url)
         response = requests.get(url)
@@ -131,6 +136,7 @@ class _IndexCache:
             done_callback: called after download completes
         """
 
+        logger.debug(f"Downloading '{url}' to '{path}'")
         response = requests.get(url, stream=True)
         get_callback()
         with open(path, "wb") as f:
@@ -163,6 +169,7 @@ class _IndexCache:
             time.sleep(0.01)  # give control to original master
             return
 
+        logger.debug(f"Downloading file '{file_name}' from package '{package_name}'")
         thread = threading.Thread(
             target=self._download_file, args=(url, path, get_callback, done_callback)
         )
