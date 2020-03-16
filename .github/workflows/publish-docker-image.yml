@@ -1,0 +1,32 @@
+name: publish-docker
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: olegtarasov/get-tag@v1
+      id: get-tag
+    - name: Build image
+      run: docker build . -t epicwink/seddy:${{ steps.get-tag.outputs.tag }}
+    - name: Login to DockerHub
+      run: >
+        echo ${{ secrets.DOCKERHUB_PASSWORD }}
+        | docker login --password-stdin -u epicwink
+    - name: Publish image
+      run: docker push seddy:${{ steps.get-tag.outputs.tag }}
+    - name: Check tag
+      id: check-tag
+      run: |
+        if [[ ${{ steps.get-tag.outputs.tag }} =~ ^v\d+\.\d+\.\d+$ ]]; then
+            echo ::set-output name=match::true
+        fi
+    - name: Publish latest image
+      if: steps.check-tag.outputs.match == 'true'
+      run: |
+        docker tag seddy:${{ steps.get-tag.outputs.tag }} seddy:latest
+        docker push seddy:latest
