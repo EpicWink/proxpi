@@ -1,0 +1,26 @@
+name: publish
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v1
+    - name: Update pip
+      run: pip install -U pip
+    - name: Build package
+      run: |
+        pip install setuptools wheel
+        python setup.py sdist bdist_wheel
+    - name: Publish package
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        pip install twine
+        twine upload dist/*
