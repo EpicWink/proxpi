@@ -1,4 +1,4 @@
-"""Install script for ``pypi-mirror``."""
+"""Install script for ``proxpi``."""
 
 import setuptools
 

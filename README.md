@@ -1,14 +1,14 @@
-# PyPI mirror
+# proxpi
 Local PyPI mirror cache
 
 ## Installation
 ```bash
-pip install pypi-mirror
+pip install proxpi
 ```
 
 ## Usage
 ```bash
-FLASK_APP=pypi_mirror flask run
+FLASK_APP=proxpi flask run
 ```
 
 ```bash

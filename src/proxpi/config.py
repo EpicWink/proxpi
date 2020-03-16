@@ -12,5 +12,5 @@ EXTRA_INDEX_TTL = os.environ.get(
     "EXTRA_INDEX_TTL", " ".join("180" for s in EXTRA_INDEX_URL.split() if s)
 )
 
-app = flask.Flask("pypi_mirror")
-app.jinja_loader = jinja2.PackageLoader("pypi_mirror")
+app = flask.Flask("proxpi")
+app.jinja_loader = jinja2.PackageLoader("proxpi")
