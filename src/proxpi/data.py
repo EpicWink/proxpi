@@ -25,6 +25,7 @@ File = collections.namedtuple("File", ("name", "url", "sha"))
 
 class NotFound(ValueError):
     """Package or file not found."""
+
     pass
 
 
