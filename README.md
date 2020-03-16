@@ -26,3 +26,9 @@ pip install --index-url http://127.0.0.1:5000/index/ simplejson
 * `PIP_EXTRA_INDEX_URL`: extra index URLs (white-space separated)
 * `EXTRA_INDEX_TTL`: corresponding extra index times-to-live in seconds (white-space
    separated), default: 3 minutes
+
+
+### Docker
+```bash
+docker run -p 5000:5000 epicwink/proxpi
+```
