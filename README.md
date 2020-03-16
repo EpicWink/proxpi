@@ -1,6 +1,10 @@
 # proxpi
 Local PyPI mirror cache
 
+* Host a proxy PyPI mirror server with caching
+* Use extra index URLs
+* Set index cache times-to-live (individually for each index)
+
 ## Installation
 ```bash
 pip install proxpi
