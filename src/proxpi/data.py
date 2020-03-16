@@ -24,10 +24,18 @@ File = collections.namedtuple("File", ("name", "url", "sha"))
 
 
 class NotFound(ValueError):
+    """Package or file not found."""
     pass
 
 
 class _IndexCache:
+    """Cache for an index.
+
+    Args:
+        index_url: index URL
+        ttl: cache time-to-live
+    """
+
     def __init__(self, index_url: str, ttl: int):
         self.index_url = index_url
         self.ttl = ttl
@@ -44,6 +52,7 @@ class _IndexCache:
             shutil.rmtree(self._package_dir)
 
     def _list_packages(self):
+        """List packages using or updating cache."""
         if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
             return
 
@@ -56,10 +65,17 @@ class _IndexCache:
             self._index[name] = link["href"]
 
     def list_packages(self) -> t.Iterable[str]:
+        """List packages.
+
+        Returns:
+            names of packages in index
+        """
+
         self._list_packages()
         return tuple(self._index)
 
     def _list_files(self, package_name: str):
+        """List package files using or updating cache."""
         packages_t = self._packages_t.get(package_name)
         if packages_t is not None and (time.monotonic() - packages_t) < self.ttl:
             return
@@ -83,6 +99,18 @@ class _IndexCache:
             self._packages[package_name][name] = File(name, url, sha)
 
     def list_files(self, package_name: str) -> t.Iterable[File]:
+        """List package files.
+
+        Args:
+            package_name: name of package to list files of
+
+        Returns:
+            files of package
+
+        Raises:
+            NotFound: if package doesn't exist in index
+        """
+
         self._list_files(package_name)
         return tuple(self._packages[package_name].values())
 
@@ -93,6 +121,15 @@ class _IndexCache:
         get_callback: t.Callable[[], t.Any],
         done_callback: t.Callable[[], t.Any],
     ):
+        """Download a file.
+
+        Args:
+            url: URL of file to download
+            path: local path to download to
+            get_callback: called after remote response
+            done_callback: called after download completes
+        """
+
         response = requests.get(url, stream=True)
         get_callback()
         with open(path, "wb") as f:
@@ -101,6 +138,7 @@ class _IndexCache:
         done_callback()
 
     def _get_file(self, package_name: str, file_name: str):
+        """Get a file using or updating cache."""
         files_t = self._files_t.get(package_name, {}).get(file_name)
         if files_t is not None and (time.monotonic() - files_t) < self.ttl:
             return
@@ -134,11 +172,32 @@ class _IndexCache:
             self._files[package_name][file_name] = url
 
     def get_file(self, package_name: str, file_name: str) -> str:
+        """Get a file.
+
+        Args:
+            package_name: package of file to get
+            file_name: name of file to get
+
+        Returns:
+            local file path, or original file URL if not yet available
+
+        Raises:
+            NotFound: if package doesn't exist in index or file doesn't
+                exist in package
+        """
+
         self._get_file(package_name, file_name)
         return self._files[package_name][file_name]
 
 
 class Cache:
+    """Package index cache.
+
+    Args:
+        root_cache: root index cache
+        extra_caches: extra indices' caches
+    """
+
     _index_cache_cls = _IndexCache
 
     def __init__(
@@ -152,6 +211,7 @@ class Cache:
 
     @classmethod
     def from_config(cls):
+        """Create cache from configuration."""
         root_cache = cls._index_cache_cls(config.INDEX_URL, int(config.INDEX_TTL))
         extra_index_urls = [s for s in config.EXTRA_INDEX_URL.split() if s]
         extra_ttls = [int(s) for s in config.EXTRA_INDEX_TTL.split() if s]
@@ -163,12 +223,30 @@ class Cache:
         return cls(root_cache, extra_caches=extra_caches)
 
     def list_packages(self) -> t.Iterable[str]:
+        """List all packages.
+
+        Returns:
+            names of all discovered packages
+        """
+
         packages = set(self.root_cache.list_packages())
         for cache in self.extra_caches:
             packages.update(cache.list_packages())
         return sorted(packages)
 
     def list_files(self, package_name: str) -> t.Iterable[File]:
+        """List package files.
+
+        Args:
+            package_name: name of package to list files of
+
+        Returns:
+            files of package
+
+        Raises:
+            NotFound: if package doesn't exist in any index
+        """
+
         try:
             return self.root_cache.list_files(package_name)
         except NotFound as e:
@@ -181,6 +259,20 @@ class Cache:
         raise exc
 
     def get_file(self, package_name: str, file_name: str) -> str:
+        """Get a file.
+
+        Args:
+            package_name: package of file to get
+            file_name: name of file to get
+
+        Returns:
+            local file path, or original file URL if not yet available
+
+        Raises:
+            NotFound: if package doesn't exist in any index or file doesn't
+                exist in package
+        """
+
         try:
             return self.root_cache.get_file(package_name, file_name)
         except NotFound as e:

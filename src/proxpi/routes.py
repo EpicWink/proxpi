@@ -17,6 +17,7 @@ Item = collections.namedtuple("Item", ("name", "url"))
 
 @config.app.route("/index/")
 def list_packages():
+    """List all packages in index(es)."""
     package_names = cache.list_packages()
     packages = [Item(n, f"/index/{n}/") for n in package_names]
     return flask.render_template("packages.html", packages=packages)
@@ -24,6 +25,7 @@ def list_packages():
 
 @config.app.route("/index/<package_name>/")
 def list_files(package_name: str):
+    """List all files for a package."""
     try:
         files = cache.list_files(package_name)
     except data.NotFound:
@@ -36,6 +38,7 @@ def list_files(package_name: str):
 
 @config.app.route("/index/<package_name>/<file_name>")
 def get_file(package_name: str, file_name: str):
+    """Download a file."""
     try:
         path = cache.get_file(package_name, file_name)
     except data.NotFound:
