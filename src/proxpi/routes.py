@@ -2,6 +2,7 @@
 
 from urllib import parse as urllib_parse
 
+import sys
 import flask
 import collections
 
@@ -9,7 +10,8 @@ from . import config
 from . import data
 
 cache = data.Cache.from_config()
-cache.list_packages()
+if "--help" not in sys.argv:
+    cache.list_packages()
 Item = collections.namedtuple("Item", ("name", "url"))
 
 
