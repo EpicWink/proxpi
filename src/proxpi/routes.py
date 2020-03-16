@@ -24,7 +24,10 @@ def list_packages():
 
 @config.app.route("/index/<package_name>/")
 def list_files(package_name: str):
-    files = cache.list_files(package_name)
+    try:
+        files = cache.list_files(package_name)
+    except data.NotFound:
+        flask.abort(404)
     files = [
         Item(f.name, f"/index/{package_name}/{f.name}#sha256={f.sha}") for f in files
     ]
@@ -33,7 +36,10 @@ def list_files(package_name: str):
 
 @config.app.route("/index/<package_name>/<file_name>")
 def get_file(package_name: str, file_name: str):
-    path = cache.get_file(package_name, file_name)
+    try:
+        path = cache.get_file(package_name, file_name)
+    except data.NotFound:
+        flask.abort(404)
     scheme = urllib_parse.urlparse(path).scheme
     if scheme and scheme != "file":
         return flask.redirect(path)
