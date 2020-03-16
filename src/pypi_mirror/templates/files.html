@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ package_name }}</title>
+</head>
+<body>
+    {%- for file in files %}
+    <a href="{{ file.url }}">{{ file.name }}</a><br>
+    {%- endfor %}
+</body>
+</html>

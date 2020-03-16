@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Index</title>
+</head>
+<body>
+    {%- for package in packages %}
+    <a href="{{ package.url }}">{{ package.name }}</a><br>
+    {%- endfor %}
+</body>
+</html>
