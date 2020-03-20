@@ -4,7 +4,7 @@ import threading
 import logging as lg
 import subprocess as sp
 
-import proxpi
+from proxpi import server as proxpi_server
 import pytest
 import requests
 from werkzeug import serving as werkzeug_serving
@@ -25,7 +25,7 @@ class Thread(threading.Thread):
 @pytest.fixture(scope="module")
 def server():
     server = werkzeug_serving.make_server(
-        host="127.0.0.1", port=5042, app=proxpi.app
+        host="127.0.0.1", port=5042, app=proxpi_server.app
     )
     thread = Thread(target=server.serve_forever)
     thread.start()

@@ -12,7 +12,7 @@ pip install proxpi
 
 ## Usage
 ```bash
-FLASK_APP=proxpi flask run
+FLASK_APP=proxpi.server flask run
 ```
 
 ```bash
