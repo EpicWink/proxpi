@@ -6,6 +6,7 @@ Includes package index interfacing and caching.
 import os
 import re
 import time
+import uuid
 import shutil
 import tempfile
 import threading
@@ -42,18 +43,10 @@ class _IndexCache:
     def __init__(self, index_url: str, ttl: int):
         self.index_url = index_url
         self.ttl = ttl
-        self._package_dir = tempfile.mkdtemp()
         self._index_t = None
         self._packages_t = {}
-        self._files_t = {}
         self._index = {}
         self._packages = {}
-        self._files = {}
-
-    def __del__(self):
-        if os.path.isdir(self._package_dir):
-            logger.debug(f"Deleting '{self._package_dir}'")
-            shutil.rmtree(self._package_dir)
 
     def _list_packages(self):
         """List packages using or updating cache."""
@@ -120,66 +113,7 @@ class _IndexCache:
         self._list_files(package_name)
         return tuple(self._packages[package_name].values())
 
-    @staticmethod
-    def _download_file(
-        url: str,
-        path: str,
-        get_callback: t.Callable[[], t.Any],
-        done_callback: t.Callable[[], t.Any],
-    ):
-        """Download a file.
-
-        Args:
-            url: URL of file to download
-            path: local path to download to
-            get_callback: called after remote response
-            done_callback: called after download completes
-        """
-
-        logger.debug(f"Downloading '{url}' to '{path}'")
-        response = requests.get(url, stream=True)
-        get_callback()
-        with open(path, "wb") as f:
-            for chunk in response.iter_content(None):
-                f.write(chunk)
-        done_callback()
-
-    def _get_file(self, package_name: str, file_name: str):
-        """Get a file using or updating cache."""
-        files_t = self._files_t.get(package_name, {}).get(file_name)
-        if files_t is not None and (time.monotonic() - files_t) < self.ttl:
-            return
-
-        self._list_files(package_name)
-        if file_name not in self._packages[package_name]:
-            raise NotFound(file_name)
-
-        path = os.path.join(self._package_dir, package_name + "_" + file_name)
-        url = self._packages[package_name][file_name].url
-
-        def get_callback():
-            self._files_t.setdefault(package_name, {})[file_name] = time.monotonic()
-
-        def done_callback():
-            package_files[file_name] = path
-
-        package_files = self._files.setdefault(package_name, {})
-        if isinstance(package_files.get(file_name), threading.Thread):
-            package_files[file_name].join(0.9)
-            time.sleep(0.01)  # give control to original master
-            return
-
-        logger.debug(f"Downloading file '{file_name}' from package '{package_name}'")
-        thread = threading.Thread(
-            target=self._download_file, args=(url, path, get_callback, done_callback)
-        )
-        package_files[file_name] = thread
-        thread.start()
-        thread.join(0.9)
-        if thread.is_alive():
-            self._files[package_name][file_name] = url
-
-    def get_file(self, package_name: str, file_name: str) -> str:
+    def get_file_url(self, package_name: str, file_name: str) -> str:
         """Get a file.
 
         Args:
@@ -194,8 +128,10 @@ class _IndexCache:
                 exist in package
         """
 
-        self._get_file(package_name, file_name)
-        return self._files[package_name][file_name]
+        self._list_files(package_name)
+        if file_name not in self._packages[package_name]:
+            raise NotFound(file_name)
+        return self._packages[package_name][file_name].url
 
     def invalidate_list(self):
         """Invalidate package list cache."""
@@ -213,20 +149,122 @@ class _IndexCache:
         self._packages.pop(package_name, None)
 
 
+class _CachedFile:
+    __slots__ = ("path", "size", "n_hits")
+
+    def __init__(self, path, size, n_hits):
+        self.path = path
+        self.size = size
+        self.n_hits = n_hits
+
+
+class _FileCache:
+    def __init__(self, max_size):
+        self.max_size = max_size
+        self._package_dir = tempfile.mkdtemp()
+        self._files = {}
+
+    def __del__(self):
+        if os.path.isdir(self._package_dir):
+            logger.debug(f"Deleting '{self._package_dir}'")
+            shutil.rmtree(self._package_dir)
+
+    def _download_file(self, url: str, path: str):
+        """Download a file.
+
+        Args:
+            url: URL of file to download
+            path: local path to download to
+        """
+
+        logger.debug(f"Downloading '{url}' to '{path}'")
+        response = requests.get(url, stream=True)
+        with open(path, "wb") as f:
+            for chunk in response.iter_content(None):
+                f.write(chunk)
+        self._files[url] = _CachedFile(path, os.stat(path).st_size, 0)
+
+    def _wait_for_existing_download(self, url: str) -> t.Union[str, None]:
+        """Wait 0.9s for existing download."""
+        file = self._files.get(url)
+        if isinstance(file, threading.Thread):
+            file.join(0.9)
+            if isinstance(self._files[url], threading.Thread):
+                return url  # default to original URL
+        return None
+
+    def _get_cached(self, url: str) -> t.Union[str, None]:
+        """Get file from cache."""
+        if url in self._files:
+            file = self._files[url]
+            file.n_hits += 1
+            return file.path
+        return None
+
+    def _start_downloading(self, url: str):
+        """Start downloading a file."""
+        suffix = os.path.splitext(urllib_parse.urlparse(url).path)[1]
+        path = os.path.join(self._package_dir, str(uuid.uuid4()) + suffix)
+
+        thread = threading.Thread(target=self._download_file, args=(url, path))
+        self._files[url] = thread
+        thread.start()
+
+    def _evict_lfu(self, url: str):
+        """Evict least-frequently-used files until under max cache size."""
+        response = requests.head(url)
+        file_size = int(response.headers.get("Content-Length", 0))
+        existing_urls = sorted(
+            (f for f in self._files if isinstance(f, _CachedFile)),
+            key=lambda k: self._files[k].n_hist,
+        )
+        existing_size = sum(self._files[k].size for k in existing_urls)
+        while existing_size + file_size > self.max_size and existing_size > 0:
+            existing_url = existing_urls.pop(0)
+            file = self._files.pop(existing_url)
+            os.unlink(file.path)
+            existing_size -= file.size
+
+    def get(self, url: str) -> str:
+        """Get a file using or updating cache.
+
+        Args:
+            url: original file URL
+
+        Returns:
+            local file path, or original file URL if not yet available
+        """
+
+        path = self._wait_for_existing_download(url)
+        if not path:
+            path = self._get_cached(url)
+            if not path:
+                self._start_downloading(url)
+                self._evict_lfu(url)
+                path = self.get(url)
+        return path
+
+
 class Cache:
     """Package index cache.
 
     Args:
         root_cache: root index cache
+        file_cache: downloaded package file cache
         extra_caches: extra indices' caches
     """
 
     _index_cache_cls = _IndexCache
+    _file_cache_cls = _FileCache
 
     def __init__(
-        self, root_cache: _IndexCache, extra_caches: t.List[_IndexCache] = None
+        self,
+        root_cache: _IndexCache,
+        file_cache: _FileCache,
+        extra_caches: t.List[_IndexCache] = None,
     ):
         self.root_cache = root_cache
+        self.file_cache = file_cache
         self.extra_caches = extra_caches or []
         self._packages = {}
         self._list_dt = None
@@ -236,6 +274,7 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         root_cache = cls._index_cache_cls(config.INDEX_URL, int(config.INDEX_TTL))
+        file_cache = cls._file_cache_cls(int(config.CACHE_SIZE))
         extra_index_urls = [s for s in config.EXTRA_INDEX_URL.split() if s]
         extra_ttls = [int(s) for s in config.EXTRA_INDEX_TTL.split() if s]
         assert len(extra_index_urls) == len(extra_ttls)
@@ -243,7 +282,7 @@ class Cache:
             cls._index_cache_cls(url, ttl)
             for url, ttl in zip(extra_index_urls, extra_ttls)
         ]
-        return cls(root_cache, extra_caches=extra_caches)
+        return cls(root_cache, file_cache, extra_caches=extra_caches)
 
     def list_packages(self) -> t.Iterable[str]:
         """List all packages.
@@ -297,15 +336,18 @@ class Cache:
         """
 
         try:
-            return self.root_cache.get_file(package_name, file_name)
+            url = self.root_cache.get_file_url(package_name, file_name)
         except NotFound as e:
-            exc = e
-        for cache in self.extra_caches:
-            try:
-                return cache.get_file(package_name, file_name)
-            except NotFound:
-                pass
-        raise exc
+            url = e
+        if isinstance(url, Exception):
+            for cache in self.extra_caches:
+                try:
+                    url = cache.get_file_url(package_name, file_name)
+                except NotFound:
+                    pass
+            if isinstance(url, Exception):
+                raise url
+        return self.file_cache.get(url)
 
     def invalidate_list(self):
         """Invalidate package list cache."""

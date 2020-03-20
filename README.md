@@ -32,6 +32,7 @@ curl -X DELETE http://127.0.0.1:5000/cache/list
 * `PIP_EXTRA_INDEX_URL`: extra index URLs (white-space separated)
 * `EXTRA_INDEX_TTL`: corresponding extra index times-to-live in seconds (white-space
    separated), default: 3 minutes
+* `CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB
 
 
 ### Docker
