@@ -3,6 +3,7 @@
 Includes package index interfacing and caching.
 """
 
+import io
 import os
 import re
 import time
@@ -15,14 +16,15 @@ import typing as t
 import logging as lg
 from urllib import parse as urllib_parse
 
-import bs4
 import requests
+from lxml import etree as lxml_etree
 
 from . import config
 
 logger = lg.getLogger(__name__)
 _sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
 _name_normalise_re = re.compile("[-_.]+")
+_html_parser = lxml_etree.HTMLParser()
 File = collections.namedtuple("File", ("name", "url", "sha"))
 
 
@@ -55,12 +57,15 @@ class _IndexCache:
 
         logger.info(f"Listing packages in index '{self.index_url}'")
         response = requests.get(self.index_url)
+        tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
 
-        soup = bs4.BeautifulSoup(response.text)
-        for link in soup.find_all("a"):
-            name = _name_normalise_re.sub("-", link.string).lower()
-            self._index[name] = link["href"]
+        root = tree.getroot()
+        body = next(b for b in root if b.tag == "body")
+        for child in body:
+            if child.tag == "a":
+                name = _name_normalise_re.sub("-", child.text).lower()
+                self._index[name] = child.attrib["href"]
 
     def list_packages(self) -> t.Iterable[str]:
         """List packages.
@@ -87,15 +92,18 @@ class _IndexCache:
         url = urllib_parse.urljoin(self.index_url, package_url)
         response = requests.get(url)
         self._packages_t[package_name] = time.monotonic()
+        tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
 
-        soup = bs4.BeautifulSoup(response.text)
+        root = tree.getroot()
+        body = next(b for b in root if b.tag == "body")
         self._packages.setdefault(package_name, {})
-        for link in soup.find_all("a"):
-            name = link.string
-            url = link["href"]
-            match = _sha_fragment_re.search(url)
-            sha = match.group(1) if match else None
-            self._packages[package_name][name] = File(name, url, sha)
+        for child in body:
+            if child.tag == "a":
+                name = child.text
+                url = child.attrib["href"]
+                match = _sha_fragment_re.search(url)
+                sha = match.group(1) if match else None
+                self._packages[package_name][name] = File(name, url, sha)
 
     def list_files(self, package_name: str) -> t.Iterable[File]:
         """List package files.
