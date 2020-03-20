@@ -1,4 +1,4 @@
 """PyPI caching mirror."""
 
-from . import routes
-from .routes import app
+from . import server
+from .server import app
