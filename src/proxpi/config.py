@@ -17,9 +17,9 @@ CACHE_SIZE = os.environ.get("CACHE_SIZE", 5 * 1024 ** 3)
 fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
     import coloredlogs
-except ImportError:
+except ImportError:  # pragma: no cover
     lg.basicConfig(level=lg.DEBUG, format=fmt)
-else:
+else:  # pragma: no cover
     coloredlogs.install(
         level=lg.DEBUG,
         fmt=fmt,
