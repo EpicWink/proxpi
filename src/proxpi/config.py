@@ -14,9 +14,21 @@ EXTRA_INDEX_TTL = os.environ.get(
 )
 CACHE_SIZE = os.environ.get("CACHE_SIZE", 5 * 1024 ** 3)
 
-lg.basicConfig(
-    level=lg.DEBUG, format="%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
-)
+fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+try:
+    import coloredlogs
+except ImportError:
+    lg.basicConfig(level=lg.DEBUG, format=fmt)
+else:
+    coloredlogs.install(
+        level=lg.DEBUG,
+        fmt=fmt,
+        field_styles={
+            "asctime": {"faint": True, "color": "white"},
+            "levelname": {"bold": True, "color": "blue"},
+            "name": {"bold": True, "color": "yellow"},
+        },
+    )
 
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
