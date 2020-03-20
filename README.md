@@ -19,6 +19,12 @@ FLASK_APP=proxpi flask run
 pip install --index-url http://127.0.0.1:5000/index/ simplejson
 ```
 
+### Cache invalidation
+```bash
+curl -X DELETE http://127.0.0.1:5000/cache/simplejson
+curl -X DELETE http://127.0.0.1:5000/cache/list
+```
+
 ### Environment variables
 * `PIP_INDEX_URL`: root index URL, default: https://pypi.org/simple/
 * `INDEX_TTL`: root index time-to-live (aka cache time-out) in seconds, default: 30

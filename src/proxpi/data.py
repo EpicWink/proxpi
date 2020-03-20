@@ -197,6 +197,21 @@ class _IndexCache:
         self._get_file(package_name, file_name)
         return self._files[package_name][file_name]
 
+    def invalidate_list(self):
+        """Invalidate package list cache."""
+        self._index_t = None
+        self._index = {}
+
+    def invalidate_package(self, package_name: str):
+        """Invalidate package file list cache.
+
+        Args:
+            package_name: package name
+        """
+
+        self._packages_t.pop(package_name, None)
+        self._packages.pop(package_name, None)
+
 
 class Cache:
     """Package index cache.
@@ -291,3 +306,22 @@ class Cache:
             except NotFound:
                 pass
         raise exc
+
+    def invalidate_list(self):
+        """Invalidate package list cache."""
+        logger.info("Invalidating package list cache.")
+        self.root_cache.invalidate_list()
+        for cache in self.extra_caches:
+            cache.invalidate_list()
+
+    def invalidate_package(self, package_name: str):
+        """Invalidate package file list cache.
+
+        Args:
+            package_name: package name
+        """
+
+        logger.info(f"Invalidating package '{package_name}' file list cache.")
+        self.root_cache.invalidate_package(package_name)
+        for cache in self.extra_caches:
+            cache.invalidate_package(package_name)

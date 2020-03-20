@@ -47,3 +47,17 @@ def get_file(package_name: str, file_name: str):
     if scheme and scheme != "file":
         return flask.redirect(path)
     return flask.send_file(path)
+
+
+@config.app.route("/cache/list", methods=["DELETE"])
+def invalidate_list():
+    """Invalidate package list cache."""
+    cache.invalidate_list()
+    return {"status": "success", "data": None}
+
+
+@config.app.route("/cache/<package_name>", methods=["DELETE"])
+def invalidate_package(package_name):
+    """Invalidate package file list cache."""
+    cache.invalidate_package(package_name)
+    return {"status": "success", "data": None}
