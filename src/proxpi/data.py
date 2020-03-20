@@ -19,7 +19,13 @@ from urllib import parse as urllib_parse
 import requests
 from lxml import etree as lxml_etree
 
-from . import config
+INDEX_URL = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple/")
+EXTRA_INDEX_URL = os.environ.get("PIP_EXTRA_INDEX_URL", "")
+INDEX_TTL = os.environ.get("INDEX_TTL", 1800)
+EXTRA_INDEX_TTL = os.environ.get(
+    "EXTRA_INDEX_TTL", " ".join("180" for s in EXTRA_INDEX_URL.split() if s)
+)
+CACHE_SIZE = os.environ.get("CACHE_SIZE", 5 * 1024 ** 3)
 
 logger = lg.getLogger(__name__)
 _sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
@@ -281,10 +287,10 @@ class Cache:
     @classmethod
     def from_config(cls):
         """Create cache from configuration."""
-        root_cache = cls._index_cache_cls(config.INDEX_URL, int(config.INDEX_TTL))
-        file_cache = cls._file_cache_cls(int(config.CACHE_SIZE))
-        extra_index_urls = [s for s in config.EXTRA_INDEX_URL.split() if s]
-        extra_ttls = [int(s) for s in config.EXTRA_INDEX_TTL.split() if s]
+        root_cache = cls._index_cache_cls(INDEX_URL, int(INDEX_TTL))
+        file_cache = cls._file_cache_cls(int(CACHE_SIZE))
+        extra_index_urls = [s for s in EXTRA_INDEX_URL.split() if s]
+        extra_ttls = [int(s) for s in EXTRA_INDEX_TTL.split() if s]
         assert len(extra_index_urls) == len(extra_ttls)
         extra_caches = [
             cls._index_cache_cls(url, ttl)
