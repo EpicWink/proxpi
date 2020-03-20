@@ -1,21 +1,40 @@
 """Server routes."""
 
+import logging as lg
 from urllib import parse as urllib_parse
 
 import sys
 import flask
+import jinja2
 import collections
 
-from . import config
 from . import data
 
+fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+try:
+    import coloredlogs
+except ImportError:  # pragma: no cover
+    lg.basicConfig(level=lg.DEBUG, format=fmt)
+else:  # pragma: no cover
+    coloredlogs.install(
+        level=lg.DEBUG,
+        fmt=fmt,
+        field_styles={
+            "asctime": {"faint": True, "color": "white"},
+            "levelname": {"bold": True, "color": "blue"},
+            "name": {"bold": True, "color": "yellow"},
+        },
+    )
+
+app = flask.Flask("proxpi")
+app.jinja_loader = jinja2.PackageLoader("proxpi")
 cache = data.Cache.from_config()
 if "--help" not in sys.argv:
     cache.list_packages()
 Item = collections.namedtuple("Item", ("name", "url"))
 
 
-@config.app.route("/index/")
+@app.route("/index/")
 def list_packages():
     """List all packages in index(es)."""
     package_names = cache.list_packages()
@@ -23,7 +42,7 @@ def list_packages():
     return flask.render_template("packages.html", packages=packages)
 
 
-@config.app.route("/index/<package_name>/")
+@app.route("/index/<package_name>/")
 def list_files(package_name: str):
     """List all files for a package."""
     try:
@@ -36,7 +55,7 @@ def list_files(package_name: str):
     return flask.render_template("files.html", package_name=package_name, files=files)
 
 
-@config.app.route("/index/<package_name>/<file_name>")
+@app.route("/index/<package_name>/<file_name>")
 def get_file(package_name: str, file_name: str):
     """Download a file."""
     try:
@@ -49,14 +68,14 @@ def get_file(package_name: str, file_name: str):
     return flask.send_file(path)
 
 
-@config.app.route("/cache/list", methods=["DELETE"])
+@app.route("/cache/list", methods=["DELETE"])
 def invalidate_list():
     """Invalidate package list cache."""
     cache.invalidate_list()
     return {"status": "success", "data": None}
 
 
-@config.app.route("/cache/<package_name>", methods=["DELETE"])
+@app.route("/cache/<package_name>", methods=["DELETE"])
 def invalidate_package(package_name):
     """Invalidate package file list cache."""
     cache.invalidate_package(package_name)
