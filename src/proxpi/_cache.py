@@ -294,6 +294,8 @@ class _FileCache:
             local file path, or original file URL if not yet available
         """
 
+        if self.max_size == 0:
+            return url
         path = self._wait_for_existing_download(url)
         if not path:
             path = self._get_cached(url)
