@@ -51,8 +51,10 @@ def list_files(package_name: str):
         files = cache.list_files(package_name)
     except _cache.NotFound:
         flask.abort(404)
+    prefix = f"/index/{package_name}/"
     files = [
-        Item(f.name, f"/index/{package_name}/{f.name}#sha256={f.sha}") for f in files
+        Item(f.name, prefix + f.name + (f"#{f.fragment}" if f.fragment else ""))
+        for f in files
     ]
     return flask.render_template("files.html", package_name=package_name, files=files)
 

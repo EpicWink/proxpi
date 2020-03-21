@@ -24,10 +24,9 @@ EXTRA_INDEX_TTLS = [int(s) for s in EXTRA_INDEX_TTLS] or [180] * len(EXTRA_INDEX
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 
 logger = logging.getLogger(__name__)
-_sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
 _name_normalise_re = re.compile("[-_.]+")
 _html_parser = lxml_etree.HTMLParser()
-File = collections.namedtuple("File", ("name", "url", "sha"))
+File = collections.namedtuple("File", ("name", "url", "fragment"))
 
 
 class NotFound(ValueError):
@@ -121,9 +120,8 @@ class _IndexCache:
             if child.tag == "a":
                 name = child.text
                 url = child.attrib["href"]
-                match = _sha_fragment_re.search(url)
-                sha = match.group(1) if match else None
-                self._packages[package_name][name] = File(name, url, sha)
+                fragment = urllib_parse.urlsplit(url).fragment
+                self._packages[package_name][name] = File(name, url, fragment)
 
     def list_files(self, package_name: str) -> t.Iterable[File]:
         """List package files.
