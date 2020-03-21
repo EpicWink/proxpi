@@ -13,10 +13,10 @@ fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
     import coloredlogs
 except ImportError:  # pragma: no cover
-    logging.basicConfig(level=logging.DEBUG, format=fmt)
+    logging.basicConfig(level=logging.INFO, format=fmt)
 else:  # pragma: no cover
     coloredlogs.install(
-        level=logging.DEBUG,
+        level=logging.INFO,
         fmt=fmt,
         field_styles={
             "asctime": {"faint": True, "color": "white"},
@@ -32,6 +32,11 @@ if "--help" not in sys.argv:
     _cache_init_thread = _cache.Thread(target=cache.list_packages)
     _cache_init_thread.start()
     app.before_first_request_funcs.append(_cache_init_thread.join)
+if app.debug or app.testing:
+    logging.root.setLevel(logging.DEBUG)
+    for handler in logging.root.handlers:
+        if handler.level > logging.DEBUG:
+            handler.level = logging.DEBUG
 
 
 @app.route("/index/")
