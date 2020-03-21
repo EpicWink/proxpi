@@ -32,13 +32,13 @@ curl -X DELETE http://127.0.0.1:5000/cache/list
 ```
 
 ### Environment variables
-* `PIP_INDEX_URL`: root index URL, default: https://pypi.org/simple/
-* `INDEX_TTL`: root index time-to-live (aka cache time-out) in seconds, default: 30
-   minutes
-* `PIP_EXTRA_INDEX_URL`: extra index URLs (white-space separated)
-* `EXTRA_INDEX_TTL`: corresponding extra index times-to-live in seconds (white-space
-   separated), default: 3 minutes
-* `CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB
+* `PROXPI_ROOT_INDEX_URL`: root index URL, default: https://pypi.org/simple/
+* `PROXPI_ROOT_INDEX_TTL`: root index time-to-live (aka cache time-out) in seconds,
+   default: 30 minutes
+* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (white-space separated)
+* `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index times-to-live in seconds
+   (white-space separated), default: 3 minutes
+* `PROXPI_CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB
 
 
 ### Docker
