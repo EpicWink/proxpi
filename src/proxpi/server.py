@@ -8,7 +8,7 @@ import flask
 import jinja2
 import collections
 
-from . import data
+from . import _cache
 
 fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
@@ -28,7 +28,7 @@ else:  # pragma: no cover
 
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
-cache = data.Cache.from_config()
+cache = _cache.Cache.from_config()
 if "--help" not in sys.argv:
     cache.list_packages()
 Item = collections.namedtuple("Item", ("name", "url"))
@@ -47,7 +47,7 @@ def list_files(package_name: str):
     """List all files for a package."""
     try:
         files = cache.list_files(package_name)
-    except data.NotFound:
+    except _cache.NotFound:
         flask.abort(404)
     files = [
         Item(f.name, f"/index/{package_name}/{f.name}#sha256={f.sha}") for f in files
@@ -60,7 +60,7 @@ def get_file(package_name: str, file_name: str):
     """Download a file."""
     try:
         path = cache.get_file(package_name, file_name)
-    except data.NotFound:
+    except _cache.NotFound:
         flask.abort(404)
     scheme = urllib_parse.urlparse(path).scheme
     if scheme and scheme != "file":
