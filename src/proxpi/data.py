@@ -9,11 +9,11 @@ import re
 import time
 import uuid
 import shutil
+import logging
 import tempfile
 import threading
 import collections
 import typing as t
-import logging as lg
 from urllib import parse as urllib_parse
 
 import requests
@@ -27,7 +27,7 @@ EXTRA_INDEX_TTL = os.environ.get(
 )
 CACHE_SIZE = os.environ.get("CACHE_SIZE", 5 * 1024 ** 3)
 
-logger = lg.getLogger(__name__)
+logger = logging.getLogger(__name__)
 _sha_fragment_re = re.compile("[#&]sha256=([^&]*)")
 _name_normalise_re = re.compile("[-_.]+")
 _html_parser = lxml_etree.HTMLParser()

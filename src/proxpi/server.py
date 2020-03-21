@@ -1,6 +1,6 @@
 """Server routes."""
 
-import logging as lg
+import logging
 from urllib import parse as urllib_parse
 
 import sys
@@ -14,10 +14,10 @@ fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
     import coloredlogs
 except ImportError:  # pragma: no cover
-    lg.basicConfig(level=lg.DEBUG, format=fmt)
+    logging.basicConfig(level=logging.DEBUG, format=fmt)
 else:  # pragma: no cover
     coloredlogs.install(
-        level=lg.DEBUG,
+        level=logging.DEBUG,
         fmt=fmt,
         field_styles={
             "asctime": {"faint": True, "color": "white"},

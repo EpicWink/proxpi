@@ -1,15 +1,15 @@
 """Test ``proxpi`` server."""
 
+import logging
 import threading
-import logging as lg
-import subprocess as sp
+import subprocess
 
 from proxpi import server as proxpi_server
 import pytest
 import requests
 from werkzeug import serving as werkzeug_serving
 
-lg.root.setLevel(lg.DEBUG)
+logging.root.setLevel(logging.DEBUG)
 
 
 class Thread(threading.Thread):
@@ -45,13 +45,15 @@ def test_pip_download(server, tmp_path):
         "--index-url",
         "http://127.0.0.1:5042/index/",
     ]
-    p = sp.run([*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"])
+    p = subprocess.run(
+        [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"]
+    )
     assert p.returncode == 0
     contents = list((tmp_path / "dest1").iterdir())
     print(contents)
     assert any("jinja2" in p.name.lower() for p in contents)
     assert any("marshmallow" in p.name.lower() for p in contents)
-    sp.run([*args, "--dest", str(tmp_path / "dest2"), "Jinja2"])
+    subprocess.run([*args, "--dest", str(tmp_path / "dest2"), "Jinja2"])
     assert p.returncode == 0
     contents = list((tmp_path / "dest2").iterdir())
     print(contents)
