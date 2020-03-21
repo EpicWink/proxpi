@@ -65,27 +65,39 @@ class _IndexCache:
     def __init__(self, index_url: str, ttl: int):
         self.index_url = index_url
         self.ttl = ttl
-        self._index_t = None
+        self._index_thread = None
+        self._index_update_timer = threading.Event()
+        self._index_uptodate = threading.Event()
         self._packages_t = {}
         self._index = {}
         self._packages = {}
 
     def _list_packages(self):
         """List packages using or updating cache."""
-        if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
-            return
-
         logger.info(f"Listing packages in index '{self.index_url}'")
         response = requests.get(self.index_url)
         tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
-        self._index_t = time.monotonic()
 
         root = tree.getroot()
         body = next(b for b in root if b.tag == "body")
+        index = {}
         for child in body:
             if child.tag == "a":
                 name = _name_normalise_re.sub("-", child.text).lower()
-                self._index[name] = child.attrib["href"]
+                index[name] = child.attrib["href"]
+        self._index = index
+
+    def _list_packages_loop(self):
+        """Continue listing packages."""
+        m = time.monotonic()
+        while True:
+            self._index_uptodate.clear()
+            try:
+                self._list_packages()
+            finally:
+                self._index_uptodate.set()
+            self._index_update_timer.clear()
+            self._index_update_timer.wait(self.ttl - (time.monotonic() - m))
 
     def list_packages(self) -> t.Iterable[str]:
         """List packages.
@@ -94,7 +106,13 @@ class _IndexCache:
             names of packages in index
         """
 
-        self._list_packages()
+        if self._index_thread is None:
+            self._index_thread = Thread(target=self._list_packages_loop)
+            self._index_thread.start()
+
+        self._index_uptodate.wait()
+        if self._index_thread.exc:
+            raise self._index_thread.exc
         return tuple(self._index)
 
     def _list_files(self, package_name: str):
@@ -103,7 +121,7 @@ class _IndexCache:
         if packages_t is not None and (time.monotonic() - packages_t) < self.ttl:
             return
 
-        self._list_packages()
+        self.list_packages()
         if package_name not in self._index:
             raise NotFound(package_name)
 
@@ -163,7 +181,8 @@ class _IndexCache:
 
     def invalidate_list(self):
         """Invalidate package list cache."""
-        self._index_t = None
+        self._index_update_timer.set()
+        self._index_uptodate.clear()
         self._index = {}
 
     def invalidate_package(self, package_name: str):
