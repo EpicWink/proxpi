@@ -340,16 +340,24 @@ class Cache:
             NotFound: if package doesn't exist in any index
         """
 
+        files = []
         try:
-            return self.root_cache.list_files(package_name)
+            root_files = self.root_cache.list_files(package_name)
         except NotFound as e:
             exc = e
+        else:
+            files.extend(root_files)
         for cache in self.extra_caches:
             try:
-                return cache.list_files(package_name)
+                extra_files = cache.list_files(package_name)
             except NotFound:
-                pass
-        raise exc
+                continue
+            for file in extra_files:
+                if file.name not in {f.name for f in files}:
+                    files.append(file)
+        if not files:
+            raise exc
+        return files
 
     def get_file(self, package_name: str, file_name: str) -> str:
         """Get a file.
