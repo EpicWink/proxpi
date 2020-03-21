@@ -6,7 +6,6 @@ from urllib import parse as urllib_parse
 import sys
 import flask
 import jinja2
-import collections
 
 from . import _cache
 
@@ -33,15 +32,13 @@ if "--help" not in sys.argv:
     _cache_init_thread = _cache.Thread(target=cache.list_packages)
     _cache_init_thread.start()
     app.before_first_request_funcs.append(_cache_init_thread.join)
-Item = collections.namedtuple("Item", ("name", "url"))
 
 
 @app.route("/index/")
 def list_packages():
     """List all packages in index(es)."""
     package_names = cache.list_packages()
-    packages = [Item(n, f"/index/{n}/") for n in package_names]
-    return flask.render_template("packages.html", packages=packages)
+    return flask.render_template("packages.html", package_names=package_names)
 
 
 @app.route("/index/<package_name>/")
@@ -51,11 +48,6 @@ def list_files(package_name: str):
         files = cache.list_files(package_name)
     except _cache.NotFound:
         flask.abort(404)
-    prefix = f"/index/{package_name}/"
-    files = [
-        Item(f.name, prefix + f.name + (f"#{f.fragment}" if f.fragment else ""))
-        for f in files
-    ]
     return flask.render_template("files.html", package_name=package_name, files=files)
 
 

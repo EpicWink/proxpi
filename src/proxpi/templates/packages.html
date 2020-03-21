@@ -5,8 +5,8 @@
     <title>Index</title>
 </head>
 <body>
-    {%- for package in packages %}
-    <a href="{{ package.url }}">{{ package.name }}</a><br>
+    {%- for package in package_names %}
+    <a href="{{ package }}/">{{ package }}</a><br>
     {%- endfor %}
 </body>
 </html>
