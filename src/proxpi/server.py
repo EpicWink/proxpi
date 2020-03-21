@@ -30,7 +30,9 @@ app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
 cache = _cache.Cache.from_config()
 if "--help" not in sys.argv:
-    cache.list_packages()
+    _cache_init_thread = _cache.Thread(target=cache.list_packages)
+    _cache_init_thread.start()
+    app.before_first_request_funcs.append(_cache_init_thread.join)
 Item = collections.namedtuple("Item", ("name", "url"))
 
 
