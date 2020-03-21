@@ -40,6 +40,24 @@ class NotFound(ValueError):
     pass
 
 
+class _Thread(threading.Thread):
+    """Exception-storing thread runner."""
+
+    exc = None
+
+    def run(self):
+        try:
+            super().run()
+        except Exception as e:
+            self.exc = e
+            raise
+
+    def join(self, timeout=None):
+        super().join(timeout)
+        if self.exc:
+            raise self.exc
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -201,9 +219,14 @@ class _FileCache:
     def _wait_for_existing_download(self, url: str) -> t.Union[str, None]:
         """Wait 0.9s for existing download."""
         file = self._files.get(url)
-        if isinstance(file, threading.Thread):
-            file.join(0.9)
-            if isinstance(self._files[url], threading.Thread):
+        if isinstance(file, _Thread):
+            try:
+                file.join(0.9)
+            except Exception:
+                if file.exc and file == self._files[url]:
+                    self._files.pop(url, None)
+                raise
+            if isinstance(self._files[url], _Thread):
                 return url  # default to original URL
         return None
 
@@ -220,7 +243,7 @@ class _FileCache:
         suffix = os.path.splitext(urllib_parse.urlparse(url).path)[1]
         path = os.path.join(self._package_dir, str(uuid.uuid4()) + suffix)
 
-        thread = threading.Thread(target=self._download_file, args=(url, path))
+        thread = _Thread(target=self._download_file, args=(url, path))
         self._files[url] = thread
         thread.start()
 
