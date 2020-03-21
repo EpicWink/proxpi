@@ -53,6 +53,19 @@ class Thread(threading.Thread):
             raise self.exc
 
 
+class _Locks:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._locks = {}
+
+    def __getitem__(self, k: str) -> threading.Lock:
+        if k not in self._locks:
+            with self._lock:
+                if k not in self._locks:
+                    self._locks[k] = threading.Lock()
+        return self._locks[k]
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -66,6 +79,8 @@ class _IndexCache:
         self.ttl = ttl
         self._index_t = None
         self._packages_t = {}
+        self._index_lock = threading.Lock()
+        self._package_locks = _Locks()
         self._index = {}
         self._packages = {}
 
@@ -93,7 +108,8 @@ class _IndexCache:
             names of packages in index
         """
 
-        self._list_packages()
+        with self._index_lock:
+            self._list_packages()
         return tuple(self._index)
 
     def _list_files(self, package_name: str):
@@ -102,7 +118,8 @@ class _IndexCache:
         if packages_t is not None and (time.monotonic() - packages_t) < self.ttl:
             return
 
-        self._list_packages()
+        with self._index_lock:
+            self._list_packages()
         if package_name not in self._index:
             raise NotFound(package_name)
 
@@ -139,7 +156,8 @@ class _IndexCache:
             NotFound: if package doesn't exist in index
         """
 
-        self._list_files(package_name)
+        with self._package_locks[package_name]:
+            self._list_files(package_name)
         return tuple(self._packages[package_name].values())
 
     def get_file_url(self, package_name: str, file_name: str) -> str:
@@ -157,13 +175,17 @@ class _IndexCache:
                 exist in package
         """
 
-        self._list_files(package_name)
+        with self._package_locks[package_name]:
+            self._list_files(package_name)
         if file_name not in self._packages[package_name]:
             raise NotFound(file_name)
         return self._packages[package_name][file_name].url
 
     def invalidate_list(self):
         """Invalidate package list cache."""
+        if self._index_lock.locked():
+            logger.info("Index already undergoing update")
+            return
         self._index_t = None
         self._index = {}
 
@@ -174,6 +196,9 @@ class _IndexCache:
             package_name: package name
         """
 
+        if self._package_locks[package_name].locked():
+            logger.info(f"Package '{package_name}' files already undergoing update")
+            return
         self._packages_t.pop(package_name, None)
         self._packages.pop(package_name, None)
 
