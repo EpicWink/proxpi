@@ -8,13 +8,18 @@ https://codecov.io/gh/EpicWink/proxpi)
 PyPI caching mirror
 
 * Host a proxy PyPI mirror server with caching
-* Use extra index URLs
+  * Cache the index (package list and packages' file list)
+  * Cache the package files
+* Support multiple indices
 * Set index cache times-to-live (individually for each index)
+* Set files cache max-size on disk
 
 ## Installation
 ```bash
 pip install proxpi
 ```
+
+Install `coloredlogs` as well to get coloured logging
 
 ## Usage
 ```bash
