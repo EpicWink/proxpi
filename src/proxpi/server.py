@@ -1,4 +1,4 @@
-"""Server routes."""
+"""Cached package index server."""
 
 import logging
 from urllib import parse as urllib_parse

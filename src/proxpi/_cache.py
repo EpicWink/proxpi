@@ -1,7 +1,4 @@
-"""Server data.
-
-Includes package index interfacing and caching.
-"""
+"""Package index interfacing and caching."""
 
 import io
 import os
