@@ -66,6 +66,26 @@ class _Locks:
         return self._locks[k]
 
 
+def _mask_password(url: str) -> str:
+    """Mask HTTP basic auth password in URL.
+
+    Args:
+        url: URL to process
+
+    Returns:
+        URL with password masked (or original URL if it has no password)
+    """
+
+    parsed = urllib_parse.urlsplit(url)
+    if not parsed.password:
+        return url
+    netloc = f"{parsed.username}:****@" + parsed.hostname
+    if parsed.port is not None:
+        netloc += f":{parsed.port}"
+    parsed = parsed._replace(netloc=netloc)
+    return urllib_parse.urlunsplit(parsed)
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -83,13 +103,14 @@ class _IndexCache:
         self._package_locks = _Locks()
         self._index = {}
         self._packages = {}
+        self._index_url_masked = _mask_password(index_url)
 
     def _list_packages(self):
         """List packages using or updating cache."""
         if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
             return
 
-        logger.info(f"Listing packages in index '{self.index_url}'")
+        logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = requests.get(self.index_url)
         tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
@@ -231,7 +252,8 @@ class _FileCache:
             path: local path to download to
         """
 
-        logger.debug(f"Downloading '{url}' to '{path}'")
+        url_masked = _mask_password(url)
+        logger.debug(f"Downloading '{url_masked}' to '{path}'")
         response = requests.get(url, stream=True)
         with open(path, "wb") as f:
             for chunk in response.iter_content(None):
