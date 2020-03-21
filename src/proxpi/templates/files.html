@@ -6,7 +6,9 @@
 </head>
 <body>
     {%- for file in files %}
-    <a href="{{ file.name }}{% if file.fragment %}#{{ file.fragment }}{% endif %}">{{ file.name }}</a><br>
+    <a href="{{ file.name }}{% if file.fragment %}#{{ file.fragment }}{% endif %}"
+        {%- for key, value in file.attributes.items() %} {{ key }}="{{ value }}"{% endfor -%}
+    >{{ file.name }}</a><br>
     {%- endfor %}
 </body>
 </html>

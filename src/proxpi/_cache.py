@@ -26,7 +26,7 @@ CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _html_parser = lxml_etree.HTMLParser()
-File = collections.namedtuple("File", ("name", "url", "fragment"))
+File = collections.namedtuple("File", ("name", "url", "fragment", "attributes"))
 
 
 class NotFound(ValueError):
@@ -120,8 +120,11 @@ class _IndexCache:
             if child.tag == "a":
                 name = child.text
                 url = child.attrib["href"]
+                attributes = {k: v for k, v in child.attrib.items() if k != "href"}
                 fragment = urllib_parse.urlsplit(url).fragment
-                self._packages[package_name][name] = File(name, url, fragment)
+                self._packages[package_name][name] = File(
+                    name, url, fragment, attributes
+                )
 
     def list_files(self, package_name: str) -> t.Iterable[File]:
         """List package files.
