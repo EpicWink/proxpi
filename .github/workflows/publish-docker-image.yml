@@ -12,13 +12,13 @@ jobs:
     - uses: olegtarasov/get-tag@v1
       id: get-tag
     - name: Build image
-      run: docker build . -t epicwink/seddy:${{ steps.get-tag.outputs.tag }}
+      run: docker build . -t epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
     - name: Publish image
-      run: docker push seddy:${{ steps.get-tag.outputs.tag }}
+      run: docker push proxpi:${{ steps.get-tag.outputs.tag }}
     - name: Check tag
       id: check-tag
       run: |
@@ -28,5 +28,5 @@ jobs:
     - name: Publish latest image
       if: steps.check-tag.outputs.match == 'true'
       run: |
-        docker tag seddy:${{ steps.get-tag.outputs.tag }} seddy:latest
-        docker push seddy:latest
+        docker tag proxpi:${{ steps.get-tag.outputs.tag }} proxpi:latest
+        docker push proxpi:latest
