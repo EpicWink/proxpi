@@ -16,9 +16,9 @@ from urllib import parse as urllib_parse
 import requests
 from lxml import etree as lxml_etree
 
-ROOT_INDEX_URL = os.environ.get("PROXPI_ROOT_INDEX_URL", "https://pypi.org/simple/")
+INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").split()
-ROOT_INDEX_TTL = int(os.environ.get("PROXPI_ROOT_INDEX_TTL", 1800))
+INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").split()
 EXTRA_INDEX_TTLS = [int(s) for s in EXTRA_INDEX_TTLS] or [180] * len(EXTRA_INDEX_URLS)
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
@@ -334,7 +334,7 @@ class Cache:
     @classmethod
     def from_config(cls):
         """Create cache from configuration."""
-        root_cache = cls._index_cache_cls(ROOT_INDEX_URL, ROOT_INDEX_TTL)
+        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL)
         file_cache = cls._file_cache_cls(CACHE_SIZE)
         assert len(EXTRA_INDEX_URLS) == len(EXTRA_INDEX_TTLS)
         extra_caches = [
