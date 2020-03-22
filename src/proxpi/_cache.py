@@ -18,8 +18,10 @@ from lxml import etree as lxml_etree
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",")
+EXTRA_INDEX_URLS = [s for s in EXTRA_INDEX_URLS if s]
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",")
+EXTRA_INDEX_TTLS = [s for s in EXTRA_INDEX_TTLS if s]
 EXTRA_INDEX_TTLS = [int(s) for s in EXTRA_INDEX_TTLS] or [180] * len(EXTRA_INDEX_URLS)
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 
