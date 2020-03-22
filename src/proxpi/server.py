@@ -1,9 +1,9 @@
 """Cached package index server."""
 
+import sys
 import logging
 from urllib import parse as urllib_parse
 
-import sys
 import flask
 import jinja2
 
