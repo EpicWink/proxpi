@@ -27,6 +27,9 @@ Install `coloredlogs` as well to get coloured logging
 FLASK_APP=proxpi.server flask run
 ```
 
+See `flask run --help` for more information on address and port binding, and certificate
+specification to use HTTPS. Alternatively, bring your own WSGI server.
+
 ```bash
 pip install --index-url http://127.0.0.1:5000/index/ simplejson
 ```
