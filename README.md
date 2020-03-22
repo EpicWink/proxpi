@@ -13,6 +13,7 @@ PyPI caching mirror
 * Support multiple indices
 * Set index cache times-to-live (individually for each index)
 * Set files cache max-size on disk
+* Manually invalidate index cache
 
 ## Installation
 ```bash
@@ -35,6 +36,9 @@ pip install --index-url http://127.0.0.1:5000/index/ simplejson
 curl -X DELETE http://127.0.0.1:5000/cache/simplejson
 curl -X DELETE http://127.0.0.1:5000/cache/list
 ```
+
+If you need to invalidate a locally cached file, restart the server: files should never
+change in a package index.
 
 ### Environment variables
 * `PROXPI_INDEX_URL`: index URL, default: https://pypi.org/simple/
