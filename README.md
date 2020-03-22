@@ -40,9 +40,9 @@ curl -X DELETE http://127.0.0.1:5000/cache/list
 * `PROXPI_INDEX_URL`: index URL, default: https://pypi.org/simple/
 * `PROXPI_INDEX_TTL`: index cache time-to-live in seconds,
    default: 30 minutes. Disable index-cache by setting this to 0
-* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (white-space separated)
+* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (comma-separated)
 * `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index cache times-to-live in seconds
-   (white-space separated), default: 3 minutes, cache disabled when 0
+   (comma-separated), default: 3 minutes, cache disabled when 0
 * `PROXPI_CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB.
   Disable files-cache by setting this to 0
 
