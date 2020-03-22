@@ -24,6 +24,7 @@ else:  # pragma: no cover
             "name": {"bold": True, "color": "yellow"},
         },
     )
+logger = logging.getLogger(__name__)
 
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
@@ -37,6 +38,7 @@ if app.debug or app.testing:
     for handler in logging.root.handlers:
         if handler.level > logging.DEBUG:
             handler.level = logging.DEBUG
+logger.info("Cache: %r", cache)
 
 
 @app.route("/index/")

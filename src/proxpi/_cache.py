@@ -107,6 +107,9 @@ class _IndexCache:
         self._packages = {}
         self._index_url_masked = _mask_password(index_url)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
+
     def _list_packages(self):
         """List packages using or updating cache."""
         if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
@@ -241,6 +244,9 @@ class _FileCache:
         self._package_dir = tempfile.mkdtemp()
         self._files = {}
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.max_size!r})"
+
     def __del__(self):
         if os.path.isdir(self._package_dir):
             logger.debug(f"Deleting '{self._package_dir}'")
@@ -354,6 +360,12 @@ class Cache:
         self._packages = {}
         self._list_dt = None
         self._package_list_dt = {}
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}({self.root_cache!r}, {self.file_cache!r}, "
+            f"{self.extra_caches!r})"
+        )
 
     @classmethod
     def from_config(cls):
