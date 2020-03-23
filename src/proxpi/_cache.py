@@ -4,7 +4,6 @@ import io
 import os
 import re
 import time
-import uuid
 import shutil
 import logging
 import tempfile
@@ -263,6 +262,8 @@ class _FileCache:
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
         response = requests.get(url, stream=True)
+        parent, _ = os.path.split(path)
+        os.makedirs(parent, exist_ok=True)
         with open(path, "wb") as f:
             for chunk in response.iter_content(None):
                 f.write(chunk)
@@ -293,8 +294,8 @@ class _FileCache:
 
     def _start_downloading(self, url: str):
         """Start downloading a file."""
-        suffix = os.path.splitext(urllib_parse.urlparse(url).path)[1]
-        path = os.path.join(self._package_dir, str(uuid.uuid4()) + suffix)
+        path = urllib_parse.urlsplit(url).path
+        path = os.path.join(self._package_dir, path.lstrip("/"))
 
         thread = Thread(target=self._download_file, args=(url, path))
         self._files[url] = thread
