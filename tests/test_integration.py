@@ -1,8 +1,11 @@
 """Test ``proxpi`` server."""
 
 import logging
+import posixpath
 import threading
 import subprocess
+from urllib import parse as urllib_parse
+from unittest import mock
 
 from proxpi import server as proxpi_server
 import pytest
@@ -97,3 +100,21 @@ def test_nonexistant_file_from_existing_package(server):
     """Test getting non-existant package file from existing package."""
     response = requests.get("http://127.0.0.1:5042/index/Jinja2/nonexistant.whl")
     assert response.status_code == 404
+
+
+def test_download_file_failed(server, tmp_path):
+    """Test getting package file when caching failed."""
+    (tmp_path / "packages").mkdir(mode=0o555)  # read-only directory
+    cache_patch = mock.patch.object(proxpi_server.cache.file_cache, "_files", {})
+    dir_patch = mock.patch.object(
+        proxpi_server.cache.file_cache, "_package_dir", str(tmp_path / "packages")
+    )
+    with cache_patch, dir_patch:
+        response = requests.get(
+            "http://127.0.0.1:5042/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
+            allow_redirects=False,
+        )
+    assert response.status_code // 100 == 3
+    url_parsed = urllib_parse.urlsplit(response.headers["location"])
+    assert url_parsed.netloc == "files.pythonhosted.org"
+    assert posixpath.split(url_parsed.path)[1] == "Jinja2-2.11.1-py2.py3-none-any.whl"
