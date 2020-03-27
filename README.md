@@ -58,3 +58,81 @@ change in a package index.
 ```bash
 docker run -p 5000:5000 epicwink/proxpi
 ```
+
+### Considerations with CI
+`proxpi` was designed with three goals (particularly for continuous integration (CI)):
+* to reduce load on PyPI package serving
+* to reduce `pip install` times
+* not require modification to the current workflow
+
+Specifically, `proxpi` was designed to run for CI services such as
+[Travis](https://travis-ci.org/),
+[Jenkins](https://jenkins.io/),
+[GitLab CI](https://docs.gitlab.com/ee/ci/),
+[Azure Pipelines](https://azure.microsoft.com/en-us/services/devops/pipelines/)
+and [GitHub Actions](https://github.com/features/actions).
+
+`proxpi` works by caching index requests (ie which versions, wheel-types, etc) are
+available for a given package (the index cache) and the package files themselves (to a
+local directory, the package cache). This means they will cache identical requests after
+the first request, and will be useless for just one `pip install`.
+
+#### Cache persistence
+As a basic end-user of these services, for at least most of these services you won't be
+able to keep a `proxpi` server running between multiple invocations of your project(s)
+CI pipeline: CI invocations are designed to be independent. This means the best that you
+can do is start the cache for just the current job.
+
+A more advanced user of these CI services can bring their own runner (personally, my
+needs are for running GitLab CI). This means you can run `proxpi` on a fully-controlled
+server (eg [EC2](https://aws.amazon.com/ec2/) instance), and proxy PyPI requests (during
+a `pip` command) through the local cache. See the instructions
+[below](#gitlab-ci-instructions).
+
+Hopefully, in the future these CI services will all implement their own transparent
+caching for PyPI. For example, Azure already has
+[Azure Artifacts](https://azure.microsoft.com/en-au/services/devops/artifacts/) which
+provides much more functionality than `proxpi`, but won't reduce `pip install` times for
+CI services not using Azure.
+
+#### GitLab CI instructions
+This implementation leverages the index URL configurable of `pip` and Docker networks.
+This is to be run on a server you have console access to.
+1. Start a GitLab CI Docker runner using
+   [their documentation](https://docs.gitlab.com/runner/install/docker.html)
+
+2. Run the `proxpi` Docker container
+   ```bash
+   docker run -d --name proxpi epicwink/proxpi:latest
+   ```
+   You don't need to expose a port (the `-p` flag) as we'll be using the internal
+   Docker (bridge) network.
+
+3. Discover the `proxpi` container's IP address
+   ```bash
+   docker inspect proxpi
+   ```
+   The relevant value is at `$[0].NetworkSettings.Networks.bridge.IPAddress`
+
+4. Set `pip`'s index URL to the `proxpi` server by setting it in the runner environment.
+   Add `PIP_INDEX_URL=http://<IPAddress>:5000/index/` and `PIP_TRUSTED_HOST=<IPAddress>`
+   to `runners.environment` in the GitLab CI runner configuration TOML. For example, you
+   may end up with the following configuration:
+   ```toml
+   [[runners]]
+     name = "awesome-ci-01"
+     url = "https://gitlab.com/"
+     token = "SECRET"
+     executor = "docker"
+     environment = [
+       "DOCKER_TLS_CERTDIR=/certs",
+       "PIP_INDEX_URL=http://172.17.0.3:5000/index/",
+       "PIP_TRUSTED_HOST=172.17.0.3",
+     ]
+   ```
+
+This is designed to not require any changes to the GitLab CI project configuration (ie
+`gitlab-ci.yml`), unless it already sets the index URL for some reason (if that's the
+case, you're probably already using a cache).
+
+Another option is to set up a proxy, but that's more effort than the above method.
