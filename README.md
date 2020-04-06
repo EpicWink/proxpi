@@ -23,12 +23,20 @@ pip install proxpi
 Install `coloredlogs` as well to get coloured logging
 
 ## Usage
+Either run `flask` locally
 ```bash
 FLASK_APP=proxpi.server flask run
 ```
 
+Or use Docker
+```bash
+docker run -p 5000:5000 epicwink/proxpi
+```
+
 See `flask run --help` for more information on address and port binding, and certificate
 specification to use HTTPS. Alternatively, bring your own WSGI server.
+
+Use PIP's index-URL flag to install packages via the proxy
 
 ```bash
 pip install --index-url http://127.0.0.1:5000/index/ simplejson
@@ -52,12 +60,6 @@ change in a package index.
    (comma-separated), default: 3 minutes, cache disabled when 0
 * `PROXPI_CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB.
   Disable files-cache by setting this to 0
-
-
-### Docker
-```bash
-docker run -p 5000:5000 epicwink/proxpi
-```
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
