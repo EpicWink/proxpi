@@ -262,6 +262,12 @@ class _FileCache:
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
         response = requests.get(url, stream=True)
+        if response.status_code // 100 >= 4:
+            logger.error(
+                f"Failed to download '{url_masked}': "
+                f"status={response.status_code}, body={response.text}"
+            )
+            return
         parent, _ = os.path.split(path)
         os.makedirs(parent, exist_ok=True)
         with open(path, "wb") as f:
