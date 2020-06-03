@@ -284,7 +284,8 @@ class _FileCache:
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
-                logger.error(f"Failed to download '{url}'", exc_info=e)
+                url_masked = _mask_password(url)
+                logger.error(f"Failed to download '{url_masked}'", exc_info=e)
                 return url
             if isinstance(self._files[url], Thread):
                 return url  # default to original URL
