@@ -161,7 +161,7 @@ class _IndexCache:
         for child in body:
             if child.tag == "a":
                 name = child.text
-                url = child.attrib["href"]
+                url = urllib_parse.urljoin(self.index_url, child.attrib["href"])
                 attributes = {k: v for k, v in child.attrib.items() if k != "href"}
                 fragment = urllib_parse.urlsplit(url).fragment
                 self._packages[package_name][name] = File(
