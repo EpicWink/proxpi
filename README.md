@@ -113,7 +113,7 @@ This is to be run on a server you have console access to.
 
 2. Run the `proxpi` Docker container
    ```bash
-   docker run -d --name proxpi epicwink/proxpi:latest
+   docker run --detach --network gitlab-runner-network --name proxpi epicwink/proxpi:latest
    ```
    You don't need to expose a port (the `-p` flag) as we'll be using the internal
    Docker (bridge) network.
