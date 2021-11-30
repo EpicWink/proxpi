@@ -100,8 +100,16 @@ CI services not using Azure.
 #### GitLab CI instructions
 This implementation leverages the index URL configurable of `pip` and Docker networks.
 This is to be run on a server you have console access to.
+
+1. Create a Docker bridge network
+   ```shell
+   docker network create gitlab-runner-network
+   ```
+
 1. Start a GitLab CI Docker runner using
    [their documentation](https://docs.gitlab.com/runner/install/docker.html)
+   (when starting the runner container, use the network created above by passing
+   `--network gitlab-runner-network`).
 
 2. Run the `proxpi` Docker container
    ```bash
@@ -110,14 +118,8 @@ This is to be run on a server you have console access to.
    You don't need to expose a port (the `-p` flag) as we'll be using the internal
    Docker (bridge) network.
 
-3. Discover the `proxpi` container's IP address
-   ```bash
-   docker inspect proxpi
-   ```
-   The relevant value is at `$[0].NetworkSettings.Networks.bridge.IPAddress`
-
 4. Set `pip`'s index URL to the `proxpi` server by setting it in the runner environment.
-   Add `PIP_INDEX_URL=http://<IPAddress>:5000/index/` and `PIP_TRUSTED_HOST=<IPAddress>`
+   Add `PIP_INDEX_URL=http://proxpi:5000/index/` and `PIP_TRUSTED_HOST=proxpi`
    to `runners.environment` in the GitLab CI runner configuration TOML. For example, you
    may end up with the following configuration:
    ```toml
@@ -128,8 +130,8 @@ This is to be run on a server you have console access to.
      executor = "docker"
      environment = [
        "DOCKER_TLS_CERTDIR=/certs",
-       "PIP_INDEX_URL=http://172.17.0.3:5000/index/",
-       "PIP_TRUSTED_HOST=172.17.0.3",
+       "PIP_INDEX_URL=http://proxpi:5000/index/",
+       "PIP_TRUSTED_HOST=proxpi",
      ]
    ```
 
