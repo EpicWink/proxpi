@@ -108,8 +108,6 @@ This is to be run on a server you have console access to.
 
 1. Start a GitLab CI Docker runner using
    [their documentation](https://docs.gitlab.com/runner/install/docker.html)
-   (when starting the runner container, use the network created above by passing
-   `--network gitlab-runner-network`).
 
 2. Run the `proxpi` Docker container
    ```bash
@@ -119,6 +117,7 @@ This is to be run on a server you have console access to.
    Docker (bridge) network.
 
 4. Set `pip`'s index URL to the `proxpi` server by setting it in the runner environment.
+   Set `runners[0].docker.network_mode` to `gitlab-runner-network`.
    Add `PIP_INDEX_URL=http://proxpi:5000/index/` and `PIP_TRUSTED_HOST=proxpi`
    to `runners.environment` in the GitLab CI runner configuration TOML. For example, you
    may end up with the following configuration:
@@ -133,6 +132,10 @@ This is to be run on a server you have console access to.
        "PIP_INDEX_URL=http://proxpi:5000/index/",
        "PIP_TRUSTED_HOST=proxpi",
      ]
+   
+   [[runners.docker]]
+     network_mode = "gitlab-runner-network"
+     ...
    ```
 
 This is designed to not require any changes to the GitLab CI project configuration (ie
