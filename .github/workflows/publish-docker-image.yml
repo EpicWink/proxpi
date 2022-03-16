@@ -9,8 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: olegtarasov/get-tag@v1
-      id: get-tag
+    - name: get-tag
+      run: echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
     - name: Build image
       run: docker build . -t epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
     - name: Login to DockerHub
