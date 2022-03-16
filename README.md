@@ -60,6 +60,8 @@ change in a package index.
    (comma-separated), default: 3 minutes, cache disabled when 0
 * `PROXPI_CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB.
   Disable files-cache by setting this to 0
+* `PROXPI_CACHE_DIR`: downloaded package files cache directory path, default: a new
+  temporary directory
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):

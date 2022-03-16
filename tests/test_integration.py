@@ -13,6 +13,7 @@ import requests
 from werkzeug import serving as werkzeug_serving
 
 logging.root.setLevel(logging.DEBUG)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 
 class Thread(threading.Thread):
@@ -107,7 +108,7 @@ def test_download_file_failed(server, tmp_path):
     (tmp_path / "packages").mkdir(mode=0o555)  # read-only directory
     cache_patch = mock.patch.object(proxpi_server.cache.file_cache, "_files", {})
     dir_patch = mock.patch.object(
-        proxpi_server.cache.file_cache, "_package_dir", str(tmp_path / "packages")
+        proxpi_server.cache.file_cache, "cache_dir", str(tmp_path / "packages")
     )
     with cache_patch, dir_patch:
         response = requests.get(

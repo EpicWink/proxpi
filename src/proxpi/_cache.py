@@ -7,6 +7,8 @@ import time
 import shutil
 import logging
 import tempfile
+import functools
+import posixpath
 import threading
 import collections
 import typing as t
@@ -23,9 +25,11 @@ EXTRA_INDEX_TTLS = os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",
 EXTRA_INDEX_TTLS = [s for s in EXTRA_INDEX_TTLS if s]
 EXTRA_INDEX_TTLS = [int(s) for s in EXTRA_INDEX_TTLS] or [180] * len(EXTRA_INDEX_URLS)
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
+CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
+_hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
 _html_parser = lxml_etree.HTMLParser()
 File = collections.namedtuple("File", ("name", "url", "fragment", "attributes"))
 
@@ -237,19 +241,62 @@ class _CachedFile:
         self.n_hits = n_hits
 
 
+def _split_path(
+    path: str, split: t.Callable[[str], t.Tuple[str, str]]
+) -> t.Generator[str, None, None]:
+    """Split path into directory components.
+
+    Args:
+        path: path to split
+        split: path-split functions
+
+    Returns:
+        path parts generator
+    """
+
+    parent, filename = split(path)
+    if not filename:
+        return
+    if parent:
+        yield from _split_path(parent, split)
+    yield filename
+
+
 class _FileCache:
-    def __init__(self, max_size):
+    def __init__(self, max_size, cache_dir=None):
         self.max_size = max_size
-        self._package_dir = tempfile.mkdtemp()
+        self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
+        self._cache_dir_provided = cache_dir
         self._files = {}
+
+        self._populate_files_from_existing_cache_dir()
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.max_size!r})"
 
     def __del__(self):
-        if os.path.isdir(self._package_dir):
-            logger.debug(f"Deleting '{self._package_dir}'")
-            shutil.rmtree(self._package_dir)
+        if not self._cache_dir_provided and os.path.isdir(self.cache_dir):
+            logger.debug(f"Deleting '{self.cache_dir}'")
+            shutil.rmtree(self.cache_dir)
+
+    def _populate_files_from_existing_cache_dir(self):
+        """Populate from user-provided cache directory."""
+        for dirpath, _, filenames in os.walk(self.cache_dir):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                size = os.path.getsize(filepath)
+                name = os.path.relpath(filepath, self.cache_dir)
+                if os.path != posixpath:
+                    name = posixpath.join(*_split_path(name, os.path.split))
+                self._files[name] = _CachedFile(filepath, size, n_hits=0)
+
+    @staticmethod
+    @functools.lru_cache(maxsize=8096)
+    def _get_key(url: str) -> str:
+        """Get file cache reference key from file URL."""
+        urlsplit = urllib_parse.urlsplit(url)
+        parent = _hostname_normalise_pattern.sub("-", urlsplit.hostname)
+        return posixpath.join(parent, *_split_path(urlsplit.path, posixpath.split))
 
     def _download_file(self, url: str, path: str):
         """Download a file.
@@ -273,9 +320,10 @@ class _FileCache:
         with open(path, "wb") as f:
             for chunk in response.iter_content(None):
                 f.write(chunk)
-        self._files[url] = _CachedFile(path, os.stat(path).st_size, 0)
+        key = self._get_key(url)
+        self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
 
-    def _wait_for_existing_download(self, url: str) -> t.Union[str, None]:
+    def _wait_for_existing_download(self, url: str) -> bool:
         """Wait 0.9s for existing download."""
         file = self._files.get(url)
         if isinstance(file, Thread):
@@ -286,10 +334,10 @@ class _FileCache:
                     self._files.pop(url, None)
                 url_masked = _mask_password(url)
                 logger.error(f"Failed to download '{url_masked}'", exc_info=e)
-                return url
+                return True
             if isinstance(self._files[url], Thread):
-                return url  # default to original URL
-        return None
+                return True  # default to original URL (due to timeout)
+        return False
 
     def _get_cached(self, url: str) -> t.Union[str, None]:
         """Get file from cache."""
@@ -301,11 +349,11 @@ class _FileCache:
 
     def _start_downloading(self, url: str):
         """Start downloading a file."""
-        path = urllib_parse.urlsplit(url).path
-        path = os.path.join(self._package_dir, path.lstrip("/"))
+        key = self._get_key(url)
+        path = os.path.join(self.cache_dir, *_split_path(key, posixpath.split))
 
         thread = Thread(target=self._download_file, args=(url, path))
-        self._files[url] = thread
+        self._files[key] = thread
         thread.start()
 
     def _evict_lfu(self, url: str):
@@ -335,9 +383,11 @@ class _FileCache:
 
         if self.max_size == 0:
             return url
-        path = self._wait_for_existing_download(url)
-        if not path:
-            path = self._get_cached(url)
+        key = self._get_key(url)
+        path = url
+        given_up = self._wait_for_existing_download(key)
+        if not given_up:
+            path = self._get_cached(key)
             if not path:
                 self._start_downloading(url)
                 self._evict_lfu(url)
@@ -380,7 +430,7 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL)
-        file_cache = cls._file_cache_cls(CACHE_SIZE)
+        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR)
         assert len(EXTRA_INDEX_URLS) == len(EXTRA_INDEX_TTLS)
         extra_caches = [
             cls._index_cache_cls(url, ttl)
