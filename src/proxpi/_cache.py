@@ -10,28 +10,65 @@ import tempfile
 import functools
 import posixpath
 import threading
-import collections
+import dataclasses
 import typing as t
-from urllib import parse as urllib_parse
+import urllib.parse
 
 import requests
-from lxml import etree as lxml_etree
+import lxml.etree
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
-EXTRA_INDEX_URLS = os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",")
-EXTRA_INDEX_URLS = [s for s in EXTRA_INDEX_URLS if s]
+EXTRA_INDEX_URLS = [
+    s for s in os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",") if s
+]
+
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
-EXTRA_INDEX_TTLS = os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",")
-EXTRA_INDEX_TTLS = [s for s in EXTRA_INDEX_TTLS if s]
-EXTRA_INDEX_TTLS = [int(s) for s in EXTRA_INDEX_TTLS] or [180] * len(EXTRA_INDEX_URLS)
+EXTRA_INDEX_TTLS = [
+    int(s) for s in os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",") if s
+] or [180] * len(EXTRA_INDEX_URLS)
+
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
-_html_parser = lxml_etree.HTMLParser()
-File = collections.namedtuple("File", ("name", "url", "fragment", "attributes"))
+_html_parser = lxml.etree.HTMLParser()
+
+
+@dataclasses.dataclass
+class File:
+    """Package file reference."""
+
+    __slots__ = ("name", "url", "fragment", "attributes")
+
+    name: str
+    """Filename."""
+
+    url: str
+    """File URL."""
+
+    fragment: str
+    """File URL fragment."""
+
+    attributes: t.Dict[str, str]
+    """File reference link element (non-href) attributes."""
+
+
+@dataclasses.dataclass
+class Package:
+    """Package files cache."""
+
+    __slots__ = ("name", "files", "refreshed")
+
+    name: str
+    """Package name."""
+
+    files: t.Dict[str, File]
+    """Package files by filename."""
+
+    refreshed: float
+    """Package last refreshed time (seconds)."""
 
 
 class NotFound(ValueError):
@@ -59,6 +96,9 @@ class Thread(threading.Thread):
 
 
 class _Locks:
+    _lock: threading.Lock
+    _locks: t.Dict[str, threading.Lock]
+
     def __init__(self):
         self._lock = threading.Lock()
         self._locks = {}
@@ -81,14 +121,14 @@ def _mask_password(url: str) -> str:
         URL with password masked (or original URL if it has no password)
     """
 
-    parsed = urllib_parse.urlsplit(url)
+    parsed = urllib.parse.urlsplit(url)
     if not parsed.password:
         return url
     netloc = f"{parsed.username}:****@" + parsed.hostname
     if parsed.port is not None:
         netloc += f":{parsed.port}"
     parsed = parsed._replace(netloc=netloc)
-    return urllib_parse.urlunsplit(parsed)
+    return urllib.parse.urlunsplit(parsed)
 
 
 class _IndexCache:
@@ -99,11 +139,18 @@ class _IndexCache:
         ttl: cache time-to-live
     """
 
+    index_url: str
+    ttl: int
+    _index_t: t.Union[float, None]
+    _index_lock: threading.Lock
+    _package_locks: _Locks
+    _index: t.Dict[str, str]
+    _packages: t.Dict[str, Package]
+
     def __init__(self, index_url: str, ttl: int):
         self.index_url = index_url
         self.ttl = ttl
         self._index_t = None
-        self._packages_t = {}
         self._index_lock = threading.Lock()
         self._package_locks = _Locks()
         self._index = {}
@@ -120,7 +167,7 @@ class _IndexCache:
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = requests.get(self.index_url)
-        tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
+        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
 
         root = tree.getroot()
@@ -129,8 +176,9 @@ class _IndexCache:
             if child.tag == "a":
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
+        logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
 
-    def list_packages(self) -> t.Iterable[str]:
+    def list_packages(self) -> t.KeysView[str]:
         """List packages.
 
         Returns:
@@ -139,40 +187,37 @@ class _IndexCache:
 
         with self._index_lock:
             self._list_packages()
-        return tuple(self._index)
+        return self._index.keys()
 
     def _list_files(self, package_name: str):
         """List package files using or updating cache."""
-        packages_t = self._packages_t.get(package_name)
-        if packages_t is not None and (time.monotonic() - packages_t) < self.ttl:
+        package = self._packages.get(package_name)
+        if package and time.monotonic() < package.refreshed + self.ttl:
             return
 
-        with self._index_lock:
-            self._list_packages()
-        if package_name not in self._index:
+        if package_name not in self.list_packages():
             raise NotFound(package_name)
 
         logger.debug(f"Listing files in package '{package_name}'")
         package_url = self._index[package_name]
-        url = urllib_parse.urljoin(self.index_url, package_url)
+        url = urllib.parse.urljoin(self.index_url, package_url)
         response = requests.get(url)
-        self._packages_t[package_name] = time.monotonic()
-        tree = lxml_etree.parse(io.BytesIO(response.content), _html_parser)
+        package = Package(package_name, files={}, refreshed=time.monotonic())
+        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
 
         root = tree.getroot()
         body = next(b for b in root if b.tag == "body")
-        self._packages.setdefault(package_name, {})
         for child in body:
             if child.tag == "a":
                 name = child.text
                 url = child.attrib["href"]
                 attributes = {k: v for k, v in child.attrib.items() if k != "href"}
-                fragment = urllib_parse.urlsplit(url).fragment
-                self._packages[package_name][name] = File(
-                    name, url, fragment, attributes
-                )
+                fragment = urllib.parse.urlsplit(url).fragment
+                package.files[name] = File(name, url, fragment, attributes)
+        self._packages[package_name] = package
+        logger.debug(f"Finished listing files in package '{package_name}'")
 
-    def list_files(self, package_name: str) -> t.Iterable[File]:
+    def list_files(self, package_name: str) -> t.ValuesView[File]:
         """List package files.
 
         Args:
@@ -187,7 +232,7 @@ class _IndexCache:
 
         with self._package_locks[package_name]:
             self._list_files(package_name)
-        return tuple(self._packages[package_name].values())
+        return self._packages[package_name].files.values()
 
     def get_file_url(self, package_name: str, file_name: str) -> str:
         """Get a file.
@@ -197,18 +242,18 @@ class _IndexCache:
             file_name: name of file to get
 
         Returns:
-            local file path, or original file URL if not yet available
+            local file URL
 
         Raises:
             NotFound: if package doesn't exist in index or file doesn't
                 exist in package
         """
 
-        with self._package_locks[package_name]:
-            self._list_files(package_name)
-        if file_name not in self._packages[package_name]:
+        self.list_files(package_name)  # updates cache
+        package = self._packages[package_name]
+        if file_name not in package.files:
             raise NotFound(file_name)
-        return self._packages[package_name][file_name].url
+        return package.files[file_name].url
 
     def invalidate_list(self):
         """Invalidate package list cache."""
@@ -228,17 +273,23 @@ class _IndexCache:
         if self._package_locks[package_name].locked():
             logger.info(f"Package '{package_name}' files already undergoing update")
             return
-        self._packages_t.pop(package_name, None)
         self._packages.pop(package_name, None)
 
 
+@dataclasses.dataclass
 class _CachedFile:
+    """Cached file."""
+
     __slots__ = ("path", "size", "n_hits")
 
-    def __init__(self, path, size, n_hits):
-        self.path = path
-        self.size = size
-        self.n_hits = n_hits
+    path: str
+    """File path."""
+
+    size: int
+    """File size."""
+
+    n_hits: int
+    """Number of cache hits."""
 
 
 def _split_path(
@@ -263,7 +314,21 @@ def _split_path(
 
 
 class _FileCache:
-    def __init__(self, max_size, cache_dir=None):
+    """Package files cache."""
+
+    max_size: int
+    cache_dir: str
+    _cache_dir_provided: t.Union[str, None]
+    _files: t.Dict[str, t.Union[_CachedFile, Thread]]
+
+    def __init__(self, max_size: int, cache_dir: str = None):
+        """Initialise file-cache.
+
+        Args:
+            max_size: maximum file-cache size
+            cache_dir: file-cache directory
+        """
+
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
         self._cache_dir_provided = cache_dir
@@ -294,7 +359,7 @@ class _FileCache:
     @functools.lru_cache(maxsize=8096)
     def _get_key(url: str) -> str:
         """Get file cache reference key from file URL."""
-        urlsplit = urllib_parse.urlsplit(url)
+        urlsplit = urllib.parse.urlsplit(url)
         parent = _hostname_normalise_pattern.sub("-", urlsplit.hostname)
         return posixpath.join(parent, *_split_path(urlsplit.path, posixpath.split))
 
@@ -322,6 +387,7 @@ class _FileCache:
                 f.write(chunk)
         key = self._get_key(url)
         self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
+        logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
         """Wait 0.9s for existing download."""
@@ -361,8 +427,8 @@ class _FileCache:
         response = requests.head(url)
         file_size = int(response.headers.get("Content-Length", 0))
         existing_urls = sorted(
-            (f for f in self._files if isinstance(f, _CachedFile)),
-            key=lambda k: self._files[k].n_hist,
+            (u for u, f in self._files.items() if isinstance(f, _CachedFile)),
+            key=lambda k: self._files[k].n_hits,
         )
         existing_size = sum(self._files[k].size for k in existing_urls)
         while existing_size + file_size > self.max_size and existing_size > 0:
@@ -395,36 +461,21 @@ class _FileCache:
         return path
 
 
+@dataclasses.dataclass
 class Cache:
-    """Package index cache.
+    """Package index cache."""
 
-    Args:
-        root_cache: root index cache
-        file_cache: downloaded package file cache
-        extra_caches: extra indices' caches
-    """
+    root_cache: _IndexCache
+    """Root index cache."""
+
+    file_cache: _FileCache
+    """Downloaded package file cache."""
+
+    extra_caches: t.List[_IndexCache] = dataclasses.field(default_factory=list)
+    """Extra indices' caches."""
 
     _index_cache_cls = _IndexCache
     _file_cache_cls = _FileCache
-
-    def __init__(
-        self,
-        root_cache: _IndexCache,
-        file_cache: _FileCache,
-        extra_caches: t.List[_IndexCache] = None,
-    ):
-        self.root_cache = root_cache
-        self.file_cache = file_cache
-        self.extra_caches = extra_caches or []
-        self._packages = {}
-        self._list_dt = None
-        self._package_list_dt = {}
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}({self.root_cache!r}, {self.file_cache!r}, "
-            f"{self.extra_caches!r})"
-        )
 
     @classmethod
     def from_config(cls):
@@ -438,7 +489,7 @@ class Cache:
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
 
-    def list_packages(self) -> t.Iterable[str]:
+    def list_packages(self) -> t.List[str]:
         """List all packages.
 
         Returns:
@@ -450,7 +501,7 @@ class Cache:
             packages.update(cache.list_packages())
         return sorted(packages)
 
-    def list_files(self, package_name: str) -> t.Iterable[File]:
+    def list_files(self, package_name: str) -> t.List[File]:
         """List package files.
 
         Args:
@@ -464,6 +515,7 @@ class Cache:
         """
 
         files = []
+        exc = None
         try:
             root_files = self.root_cache.list_files(package_name)
         except NotFound as e:
@@ -478,7 +530,7 @@ class Cache:
             for file in extra_files:
                 if file.name not in {f.name for f in files}:
                     files.append(file)
-        if not files:
+        if exc:
             raise exc
         return files
 

@@ -2,7 +2,7 @@
 
 import sys
 import logging
-from urllib import parse as urllib_parse
+import urllib.parse
 
 import flask
 import jinja2
@@ -55,6 +55,7 @@ def list_files(package_name: str):
         files = cache.list_files(package_name)
     except _cache.NotFound:
         flask.abort(404)
+        raise
     return flask.render_template("files.html", package_name=package_name, files=files)
 
 
@@ -65,7 +66,8 @@ def get_file(package_name: str, file_name: str):
         path = cache.get_file(package_name, file_name)
     except _cache.NotFound:
         flask.abort(404)
-    scheme = urllib_parse.urlparse(path).scheme
+        raise
+    scheme = urllib.parse.urlparse(path).scheme
     if scheme and scheme != "file":
         return flask.redirect(path)
     return flask.send_file(path)
