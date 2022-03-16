@@ -16,6 +16,7 @@ PyPI caching mirror
 * Manually invalidate index cache
 
 ## Installation
+If not using Docker
 ```bash
 pip install proxpi
 ```
@@ -113,7 +114,12 @@ This is to be run on a server you have console access to.
 
 2. Run the `proxpi` Docker container
    ```bash
-   docker run --detach --network gitlab-runner-network --name proxpi epicwink/proxpi:latest
+   docker run \
+     --detach \
+     --network gitlab-runner-network \
+     --volume proxpi-cache:/var/cache/proxpi \
+     --env PROXPI_CACHE_DIR=/var/cache/proxpi \
+     --name proxpi epicwink/proxpi:latest
    ```
    You don't need to expose a port (the `-p` flag) as we'll be using the internal
    Docker (bridge) network.
