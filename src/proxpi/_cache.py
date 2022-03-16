@@ -348,7 +348,10 @@ class _FileCache:
         self._populate_files_from_existing_cache_dir()
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.max_size!r})"
+        return (
+            f"{self.__class__.__name__}({self.max_size!r}, {self.cache_dir!r}, "
+            f"{self.session!r})"
+        )
 
     def __del__(self):
         if not self._cache_dir_provided and os.path.isdir(self.cache_dir):
