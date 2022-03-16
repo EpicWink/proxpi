@@ -409,6 +409,7 @@ class _FileCache:
         """Get file from cache."""
         if url in self._files:
             file = self._files[url]
+            assert isinstance(file, _CachedFile)
             file.n_hits += 1
             return file.path
         return None
@@ -482,7 +483,11 @@ class Cache:
         """Create cache from configuration."""
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL)
         file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR)
-        assert len(EXTRA_INDEX_URLS) == len(EXTRA_INDEX_TTLS)
+        if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
+            raise RuntimeError(
+                f"Number of extra index URLs doesn't equal number of extra index "
+                f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
+            )
         extra_caches = [
             cls._index_cache_cls(url, ttl)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
