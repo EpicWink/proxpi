@@ -11,12 +11,13 @@ jobs:
     - uses: actions/checkout@v2
     - name: Set up Python
       uses: actions/setup-python@v1
-    - name: Update pip
-      run: pip install -U pip
+    - name: Install build tools
+      run: |
+        pip install -U pip
+        pip install build
     - name: Build package
       run: |
-        pip install setuptools wheel
-        python setup.py sdist bdist_wheel
+        pyproject-build --outdir dist/
     - name: Publish package
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
