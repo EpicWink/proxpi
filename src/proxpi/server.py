@@ -1,5 +1,6 @@
 """Cached package index server."""
 
+import os
 import sys
 import logging
 import urllib.parse
@@ -39,6 +40,15 @@ if app.debug or app.testing:
         if handler.level > logging.DEBUG:
             handler.level = logging.DEBUG
 logger.info("Cache: %r", cache)
+
+
+@app.route("/")
+def index():
+    """Home page."""
+    max_age = app.get_send_file_max_age("index.html")
+    return flask.send_from_directory(
+        os.path.join(app.root_path, app.template_folder), "index.html", max_age=max_age
+    )
 
 
 @app.route("/index/")

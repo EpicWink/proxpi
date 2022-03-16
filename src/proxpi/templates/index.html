@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Proxpi</title>
+</head>
+
+<body>
+<h1>Proxpi</h1>
+
+<div><p><a href="index/">Package index</a></p></div>
+
+<div>
+  <button type="button" id="invalidateIndex">Invalidate index</button>
+  <span id="invalidateIndexMessage" style="font-style: italic"></span>
+</div>
+
+<div>
+  <label for="invalidatePackageName">Package name:</label>
+  <input id="invalidatePackageName" minlength="1" required>
+  <button type="button" id="invalidatePackage">Invalidate package</button>
+  <span id="invalidatePackageMessage" style="font-style: italic"></span>
+</div>
+
+<script>
+  async function invalidate(urlSuffix, name, button, messageBox) {
+    button.disabled = true;
+    messageBox.innerText = `Invalidating ${name} cache...`;
+
+    const request = new Request(`cache/${urlSuffix}`, {
+      method: "delete",
+      headers: { Accept: "application/json" },
+    });
+
+    let response;
+    try {
+      response = await fetch(request);
+    } catch (e) {
+      messageBox.innerText = `Failed to invalidate ${name} cache: ${e}`;
+    } finally {
+      button.disabled = false;
+    }
+
+    if (response && !response.ok) {
+      messageBox.innerText = `Failed to invalidate ${name} cache: ${response.statusText}`;
+      console.error(await response.text());
+    } else if (response) {
+      messageBox.innerText = `Successfully invalidated ${name} cache`;
+    }
+  }
+
+  async function invalidateIndex() {
+    const button = document.getElementById("invalidateIndex");
+    const messageBox = document.getElementById("invalidateIndexMessage");
+    await invalidate("list", "index", button, messageBox);
+  }
+
+  async function invalidatePackage() {
+    const button = document.getElementById("invalidatePackage");
+    const messageBox = document.getElementById("invalidatePackageMessage");
+    const packageNameInput = document.getElementById("invalidatePackageName");
+    packageNameInput.reportValidity();
+    await invalidate(packageNameInput.value, `'${packageNameInput.value}' package`, button, messageBox);
+  }
+
+  document.getElementById("invalidateIndex").addEventListener("click", invalidateIndex);
+  document.getElementById("invalidatePackage").addEventListener("click", invalidatePackage);
+</script>
+</body>
+</html>
