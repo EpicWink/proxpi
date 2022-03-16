@@ -1,8 +1,6 @@
 venv/
 .venv
-.git/
 htmlcov/
 __pycache__/
-.github/
 *.egg-info/
 .pytest_cache/

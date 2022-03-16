@@ -12,7 +12,7 @@ jobs:
     - name: get-tag
       run: echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
     - name: Build image
-      run: docker build . -t epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
+      run: docker buildx build . -t epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
