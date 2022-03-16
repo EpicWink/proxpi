@@ -199,14 +199,19 @@ class _IndexCache:
         if package and time.monotonic() < package.refreshed + self.ttl:
             return
 
-        if package_name not in self.list_packages():
-            raise NotFound(package_name)
-
         logger.debug(f"Listing files in package '{package_name}'")
-        package_url = self._index[package_name]
-        url = urllib.parse.urljoin(self.index_url, package_url)
-        response = self.session.get(url)
-        response.raise_for_status()
+        response = None
+        if time.monotonic() > (self._index_t or 0.0) + self.ttl:
+            url = urllib.parse.urljoin(self.index_url, package_name)
+            response = self.session.get(url)
+        if not response or not response.ok:
+            if package_name not in self.list_packages():
+                raise NotFound(package_name)
+            package_url = self._index[package_name]
+            url = urllib.parse.urljoin(self.index_url, package_url)
+            response = self.session.get(url)
+            response.raise_for_status()
+
         package = Package(package_name, files={}, refreshed=time.monotonic())
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
 

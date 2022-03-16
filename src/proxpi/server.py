@@ -1,7 +1,6 @@
 """Cached package index server."""
 
 import os
-import sys
 import logging
 import urllib.parse
 
@@ -30,10 +29,6 @@ logger = logging.getLogger(__name__)
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
 cache = _cache.Cache.from_config()
-if "--help" not in sys.argv:
-    _cache_init_thread = _cache.Thread(target=cache.list_packages)
-    _cache_init_thread.start()
-    app.before_first_request_funcs.append(_cache_init_thread.join)
 if app.debug or app.testing:
     logging.root.setLevel(logging.DEBUG)
     for handler in logging.root.handlers:
