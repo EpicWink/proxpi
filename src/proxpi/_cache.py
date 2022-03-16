@@ -320,6 +320,7 @@ class _FileCache:
     cache_dir: str
     _cache_dir_provided: t.Union[str, None]
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
+    _evict_lock: threading.Lock
 
     def __init__(self, max_size: int, cache_dir: str = None):
         """Initialise file-cache.
@@ -333,6 +334,7 @@ class _FileCache:
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
         self._cache_dir_provided = cache_dir
         self._files = {}
+        self._evict_lock = threading.Lock()
 
         self._populate_files_from_existing_cache_dir()
 
@@ -456,7 +458,8 @@ class _FileCache:
             path = self._get_cached(key)
             if not path:
                 self._start_downloading(url)
-                self._evict_lfu(url)
+                with self._evict_lock:
+                    self._evict_lfu(url)
                 path = self.get(url)
         return path
 
