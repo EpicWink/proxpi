@@ -137,19 +137,22 @@ class _IndexCache:
     Args:
         index_url: index URL
         ttl: cache time-to-live
+        session: index request session
     """
 
     index_url: str
     ttl: int
+    session: requests.Session
     _index_t: t.Union[float, None]
     _index_lock: threading.Lock
     _package_locks: _Locks
     _index: t.Dict[str, str]
     _packages: t.Dict[str, Package]
 
-    def __init__(self, index_url: str, ttl: int):
+    def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
         self.index_url = index_url
         self.ttl = ttl
+        self.session = session or requests.Session()
         self._index_t = None
         self._index_lock = threading.Lock()
         self._package_locks = _Locks()
@@ -166,7 +169,8 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = requests.get(self.index_url)
+        response = self.session.get(self.index_url)
+        response.raise_for_status()
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
 
@@ -201,7 +205,8 @@ class _IndexCache:
         logger.debug(f"Listing files in package '{package_name}'")
         package_url = self._index[package_name]
         url = urllib.parse.urljoin(self.index_url, package_url)
-        response = requests.get(url)
+        response = self.session.get(url)
+        response.raise_for_status()
         package = Package(package_name, files={}, refreshed=time.monotonic())
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
 
@@ -322,16 +327,20 @@ class _FileCache:
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
     _evict_lock: threading.Lock
 
-    def __init__(self, max_size: int, cache_dir: str = None):
+    def __init__(
+        self, max_size: int, cache_dir: str = None, session: requests.Session = None
+    ):
         """Initialise file-cache.
 
         Args:
             max_size: maximum file-cache size
             cache_dir: file-cache directory
+            session: index request session
         """
 
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
+        self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
@@ -375,7 +384,7 @@ class _FileCache:
 
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
-        response = requests.get(url, stream=True)
+        response = self.session.get(url, stream=True)
         if response.status_code // 100 >= 4:
             logger.error(
                 f"Failed to download '{url_masked}': "
@@ -427,8 +436,8 @@ class _FileCache:
 
     def _evict_lfu(self, url: str):
         """Evict least-frequently-used files until under max cache size."""
-        response = requests.head(url)
-        file_size = int(response.headers.get("Content-Length", 0))
+        response = self.session.head(url)
+        file_size = int(response.headers.get("Content-Length", 0)) if response.ok else 0
         cache_keys = [u for u, f in self._files.items() if isinstance(f, _CachedFile)]
         cache_keys.sort(key=lambda k: self._files[k].size)
         cache_keys.sort(key=lambda k: self._files[k].n_hits)
@@ -483,8 +492,9 @@ class Cache:
     @classmethod
     def from_config(cls):
         """Create cache from configuration."""
-        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL)
-        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR)
+        session = requests.Session()
+        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
+        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
                 f"Number of extra index URLs doesn't equal number of extra index "
