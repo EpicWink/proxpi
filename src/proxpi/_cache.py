@@ -427,13 +427,12 @@ class _FileCache:
         """Evict least-frequently-used files until under max cache size."""
         response = requests.head(url)
         file_size = int(response.headers.get("Content-Length", 0))
-        existing_urls = sorted(
-            (u for u, f in self._files.items() if isinstance(f, _CachedFile)),
-            key=lambda k: self._files[k].n_hits,
-        )
-        existing_size = sum(self._files[k].size for k in existing_urls)
+        cache_keys = [u for u, f in self._files.items() if isinstance(f, _CachedFile)]
+        cache_keys.sort(key=lambda k: self._files[k].size)
+        cache_keys.sort(key=lambda k: self._files[k].n_hits)
+        existing_size = sum(self._files[k].size for k in cache_keys)
         while existing_size + file_size > self.max_size and existing_size > 0:
-            existing_url = existing_urls.pop(0)
+            existing_url = cache_keys.pop(0)
             file = self._files.pop(existing_url)
             os.unlink(file.path)
             existing_size -= file.size
