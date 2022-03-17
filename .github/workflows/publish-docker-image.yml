@@ -9,24 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: get-tag
-      run: echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
     - name: Build image
-      run: docker buildx build . -t epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
+      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
     - name: Publish image
-      run: docker push epicwink/proxpi:${{ steps.get-tag.outputs.tag }}
+      run: docker push "epicwink/proxpi:${{ github.ref_name }}"
     - name: Check tag
       id: check-tag
       run: |
-        if [[ ${{ steps.get-tag.outputs.tag }} =~ ^v\d+\.\d+\.\d+$ ]]; then
+        if [[ "${{ github.ref_name }}" =~ ^v\d+\.\d+\.\d+$ ]]; then
             echo ::set-output name=match::true
         fi
     - name: Publish latest image
       if: steps.check-tag.outputs.match == 'true'
       run: |
-        docker tag epicwink/proxpi:${{ steps.get-tag.outputs.tag }} epicwink/proxpi:latest
+        docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
         docker push epicwink/proxpi:latest
