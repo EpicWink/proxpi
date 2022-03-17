@@ -36,6 +36,22 @@ else:
     except importlib.metadata.PackageNotFoundError:
         pass
 
+try:
+    import gunicorn.glogging
+except ImportError:
+    gunicorn = None
+else:
+
+    class _GunicornLogger(gunicorn.glogging.Logger):
+        def __init__(self, cfg):
+            super().__init__(cfg)
+            self.error_log.propagate = True
+            self.access_log.propagate = True
+
+        def _set_handler(self, *_, **__):
+            pass
+
+
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
 cache = _cache.Cache.from_config()

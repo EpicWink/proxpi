@@ -29,7 +29,7 @@ Either run `flask` locally
 FLASK_APP=proxpi.server flask run
 ```
 
-Or use Docker
+Or use Docker (which uses a [Gunicorn](https://gunicorn.org/) WSGI server)
 ```bash
 docker run -p 5000:5000 epicwink/proxpi
 ```
