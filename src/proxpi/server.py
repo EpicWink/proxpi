@@ -26,6 +26,16 @@ else:  # pragma: no cover
     )
 logger = logging.getLogger(__name__)
 
+try:
+    import importlib.metadata
+except ImportError:
+    importlib = None
+else:
+    try:
+        logger.info(f"proxpi version: {importlib.metadata.version('proxpi')}")
+    except importlib.metadata.PackageNotFoundError:
+        pass
+
 app = flask.Flask("proxpi")
 app.jinja_loader = jinja2.PackageLoader("proxpi")
 cache = _cache.Cache.from_config()
