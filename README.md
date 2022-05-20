@@ -24,19 +24,25 @@ pip install proxpi
 Install `coloredlogs` as well to get coloured logging
 
 ## Usage
-Either run `flask` locally
-```bash
-FLASK_APP=proxpi.server flask run
-```
-
-Or use Docker (which uses a [Gunicorn](https://gunicorn.org/) WSGI server)
+### Start server
+#### Docker
+Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 ```bash
 docker run -p 5000:5000 epicwink/proxpi
+```
+
+Without arguments, runs with 2 threads. If passing arguments, make sure to bind to an
+exported address (or all with `0.0.0.0`) on port 5000 (ie `--bind 0.0.0.0:5000`).
+
+#### Local
+```bash
+FLASK_APP=proxpi.server flask run
 ```
 
 See `flask run --help` for more information on address and port binding, and certificate
 specification to use HTTPS. Alternatively, bring your own WSGI server.
 
+### Use proxy
 Use PIP's index-URL flag to install packages via the proxy
 
 ```bash
@@ -44,6 +50,7 @@ pip install --index-url http://127.0.0.1:5000/index/ simplejson
 ```
 
 ### Cache invalidation
+Either head to http://127.0.0.1:5000/ in the browser, or run:
 ```bash
 curl -X DELETE http://127.0.0.1:5000/cache/simplejson
 curl -X DELETE http://127.0.0.1:5000/cache/list
@@ -121,8 +128,8 @@ This is to be run on a server you have console access to.
      --env PROXPI_CACHE_DIR=/var/cache/proxpi \
      --name proxpi epicwink/proxpi:latest
    ```
-   You don't need to expose a port (the `-p` flag) as we'll be using the internal
-   Docker (bridge) network.
+   You don't need to expose a port (the `-p` flag) as we'll be using an internal
+   Docker network.
 
 4. Set `pip`'s index URL to the `proxpi` server by setting it in the runner environment.
    Set `runners[0].docker.network_mode` to `gitlab-runner-network`.
