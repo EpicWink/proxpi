@@ -62,6 +62,7 @@ if app.debug or app.testing:
             handler.level = logging.DEBUG
 logger.info("Cache: %r", cache)
 KNOWN_LATEST_JSON_VERSION = "v1"
+KNOWN_DATASET_KEYS = ["requires-python", "dist-info-metadata", "gpg-sig", "yanked"]
 
 
 def _wants_json(version: str = "v1") -> bool:
@@ -128,16 +129,9 @@ def list_files(package_name: str):
                 except ValueError:
                     continue
                 file_data["hashes"][hash_name] = hash_value
-            if "data-requires-python" in file.attributes:
-                file_data["requires-python"] = file.attributes["data-requires-python"]
-            if "data-dist-info-metadata" in file.attributes:
-                file_data["dist-info-metadata"] = (
-                    file.attributes["data-dist-info-metadata"]
-                )
-            if "data-gpg-sig" in file.attributes:
-                file_data["gpg-sig"] = file.attributes["data-gpg-sig"]
-            if "data-yanked" in file.attributes:
-                file_data["yanked"] = file.attributes["data-yanked"]
+            for data_set_key in KNOWN_DATASET_KEYS:
+                if f"data-{data_set_key}" in file.attributes:
+                    file_data[data_set_key] = file.attributes[f"data-{data_set_key}"]
             files_data.append(file_data)
         response = _build_json_response({
             "meta": {"api-version": "1.0"},
