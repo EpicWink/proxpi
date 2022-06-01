@@ -98,7 +98,7 @@ def list_packages():
     """List all packages in index(es)."""
     package_names = cache.list_packages()
     if _wants_json():
-        return _build_json_response({
+        response = _build_json_response({
             "meta": {"api-version": "1.0"},
             "projects": {n: {"url": f"{n}/"} for n in package_names},
         })

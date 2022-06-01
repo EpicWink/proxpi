@@ -64,11 +64,63 @@ def test_pip_download(server, tmp_path):
     assert any("jinja2" in p.name.lower() for p in contents)
 
 
-def test_list(server):
+@pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
+def test_list(server, accept):
     """Test getting package list."""
-    response = requests.get("http://127.0.0.1:5042/index/")
+    response = requests.get("http://127.0.0.1:5042/index/", headers={"Accept": accept})
     assert response.status_code == 200
+    assert response.headers["Content-Type"][:9] == "text/html"
+    assert "Accept" in response.headers["Vary"]
     assert "simplejson" in response.text
+
+
+@pytest.mark.parametrize("accept", [
+    "application/vnd.pypi.simple.v1+json",
+    "application/vnd.pypi.simple.latest+json",
+])
+def test_list_json(server, accept):
+    """Test getting package list with JSON API."""
+    response = requests.get("http://127.0.0.1:5042/index/", headers={"Accept": accept})
+    assert response.status_code == 200
+    assert response.headers["Content-Type"][:35] == (
+        "application/vnd.pypi.simple.v1+json"
+    )
+    assert "Accept" in response.headers["Vary"]
+    assert response.json()["meta"] == {"api-version": "1.0"}
+    assert response.json()["projects"]["simplejson"] == {"url": "simplejson/"}
+
+
+@pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
+def test_package(server, accept):
+    """Test getting package files."""
+    response = requests.get(
+        "http://127.0.0.1:5042/index/simplejson/", headers={"Accept": accept}
+    )
+    assert response.status_code == 200
+    assert response.headers["Content-Type"][:9] == "text/html"
+    assert "Accept" in response.headers["Vary"]
+    assert "simplejson" in response.text
+
+
+@pytest.mark.parametrize("accept", [
+    "application/vnd.pypi.simple.v1+json",
+    "application/vnd.pypi.simple.latest+json",
+])
+def test_package_json(server, accept):
+    """Test getting package files with JSON API."""
+    response = requests.get(
+        "http://127.0.0.1:5042/index/simplejson/", headers={"Accept": accept}
+    )
+    assert response.status_code == 200
+    assert response.headers["Content-Type"][:35] == (
+        "application/vnd.pypi.simple.v1+json"
+    )
+    assert "Accept" in response.headers["Vary"]
+    assert response.json()["meta"] == {"api-version": "1.0"}
+    assert response.json()["name"] == "simplejson"
+    assert all(f["filename"] for f in response.json()["files"])
+    assert all(f["url"] for f in response.json()["files"])
+    assert all("hashes" in f for f in response.json()["files"])
 
 
 def test_invalidate_list(server):
