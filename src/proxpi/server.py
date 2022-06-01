@@ -61,6 +61,27 @@ if app.debug or app.testing:
         if handler.level > logging.DEBUG:
             handler.level = logging.DEBUG
 logger.info("Cache: %r", cache)
+KNOWN_LATEST_JSON_VERSION = "v1"
+
+
+def _wants_json(version: str = "v1") -> bool:
+    if version == KNOWN_LATEST_JSON_VERSION and _wants_json("latest"):
+        return True
+    json_key = f"application/vnd.pypi.simple.{version}+json"
+    if flask.request.args.get("format") == json_key:
+        return True
+    json_quality = flask.request.accept_mimetypes.quality(json_key)
+    return json_quality and json_quality >= max(
+        flask.request.accept_mimetypes.quality("text/html"),
+        flask.request.accept_mimetypes.quality("application/vnd.pypi.simple.v1+html"),
+    )
+
+
+def _build_json_response(data: dict, version: str = "v1") -> flask.Response:
+    response = flask.jsonify(data)
+    response.mimetype = f"application/vnd.pypi.simple.{version}+json"
+    response.vary = (", " if response.vary else "") + "Accept"
+    return response
 
 
 @app.route("/")
@@ -76,6 +97,11 @@ def index():
 def list_packages():
     """List all packages in index(es)."""
     package_names = cache.list_packages()
+    if _wants_json():
+        return _build_json_response({
+            "meta": {"api-version": "1.0"},
+            "projects": {n: {"url": f"{n}/"} for n in package_names},
+        })
     return flask.render_template("packages.html", package_names=package_names)
 
 
@@ -87,6 +113,34 @@ def list_files(package_name: str):
     except _cache.NotFound:
         flask.abort(404)
         raise
+
+    if _wants_json():
+        files_data = []
+        for file in files:
+            file_data = {"filename": file.name, "url": file.url, "hashes": {}}
+            for part in file.fragment.split(","):
+                try:
+                    hash_name, hash_value = part.split("=")
+                except ValueError:
+                    continue
+                file_data["hashes"][hash_name] = hash_value
+            if "data-requires-python" in file.attributes:
+                file_data["requires-python"] = file.attributes["data-requires-python"]
+            if "data-dist-info-metadata" in file.attributes:
+                file_data["dist-info-metadata"] = (
+                    file.attributes["data-dist-info-metadata"]
+                )
+            if "data-gpg-sig" in file.attributes:
+                file_data["gpg-sig"] = file.attributes["data-gpg-sig"]
+            if "data-yanked" in file.attributes:
+                file_data["yanked"] = file.attributes["data-yanked"]
+            files_data.append(file_data)
+        return _build_json_response({
+            "meta": {"api-version": "1.0"},
+            "name": package_name,
+            "files": files_data,
+        })
+
     return flask.render_template("files.html", package_name=package_name, files=files)
 
 
