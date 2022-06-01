@@ -80,7 +80,6 @@ def _wants_json(version: str = "v1") -> bool:
 def _build_json_response(data: dict, version: str = "v1") -> flask.Response:
     response = flask.jsonify(data)
     response.mimetype = f"application/vnd.pypi.simple.{version}+json"
-    response.vary = (", " if response.vary else "") + "Accept"
     return response
 
 
@@ -102,7 +101,12 @@ def list_packages():
             "meta": {"api-version": "1.0"},
             "projects": {n: {"url": f"{n}/"} for n in package_names},
         })
-    return flask.render_template("packages.html", package_names=package_names)
+    else:
+        response = flask.make_response(flask.render_template(
+            "packages.html", package_names=package_names
+        ))
+    response.vary = (", " if response.vary else "") + "Accept"
+    return response
 
 
 @app.route("/index/<package_name>/")
@@ -135,13 +139,19 @@ def list_files(package_name: str):
             if "data-yanked" in file.attributes:
                 file_data["yanked"] = file.attributes["data-yanked"]
             files_data.append(file_data)
-        return _build_json_response({
+        response = _build_json_response({
             "meta": {"api-version": "1.0"},
             "name": package_name,
             "files": files_data,
         })
 
-    return flask.render_template("files.html", package_name=package_name, files=files)
+    else:
+        response = flask.make_response(flask.render_template(
+            "files.html", package_name=package_name, files=files
+        ))
+
+    response.vary = (", " if response.vary else "") + "Accept"
+    return response
 
 
 @app.route("/index/<package_name>/<file_name>")
