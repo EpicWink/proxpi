@@ -74,14 +74,14 @@ def index():
 
 @app.route("/index/")
 def list_packages():
-    """List all packages in index(es)."""
-    package_names = cache.list_packages()
+    """List all projects in index(es)."""
+    package_names = cache.list_projects()
     return flask.render_template("packages.html", package_names=package_names)
 
 
 @app.route("/index/<package_name>/")
 def list_files(package_name: str):
-    """List all files for a package."""
+    """List all files for a project."""
     try:
         files = cache.list_files(package_name)
     except _cache.NotFound:
@@ -106,13 +106,13 @@ def get_file(package_name: str, file_name: str):
 
 @app.route("/cache/list", methods=["DELETE"])
 def invalidate_list():
-    """Invalidate package list cache."""
+    """Invalidate project list cache."""
     cache.invalidate_list()
     return {"status": "success", "data": None}
 
 
 @app.route("/cache/<package_name>", methods=["DELETE"])
 def invalidate_package(package_name):
-    """Invalidate package file list cache."""
-    cache.invalidate_package(package_name)
+    """Invalidate project file list cache."""
+    cache.invalidate_project(package_name)
     return {"status": "success", "data": None}
