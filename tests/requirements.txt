@@ -1,2 +1,3 @@
+packaging
 pytest
 pytest-cov
