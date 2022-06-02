@@ -7,6 +7,7 @@ import time
 import shutil
 import logging
 import tempfile
+import warnings
 import functools
 import posixpath
 import threading
@@ -164,7 +165,7 @@ class _IndexCache:
         return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
 
     def _list_packages(self):
-        """List packages using or updating cache."""
+        """List projects using or updating cache."""
         if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
             return
 
@@ -185,8 +186,24 @@ class _IndexCache:
     def list_packages(self) -> t.KeysView[str]:
         """List packages.
 
+        Deprecated: use ``list_projects``.
+
         Returns:
             names of packages in index
+        """
+
+        warnings.warn(
+            message="`list_packages` is deprecated, use `list_projects`",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.list_projects()
+
+    def list_projects(self) -> t.KeysView[str]:
+        """List projects.
+
+        Returns:
+            names of projects in index
         """
 
         with self._index_lock:
@@ -194,7 +211,7 @@ class _IndexCache:
         return self._index.keys()
 
     def _list_files(self, package_name: str):
-        """List package files using or updating cache."""
+        """List project files using or updating cache."""
         package = self._packages.get(package_name)
         if package and time.monotonic() < package.refreshed + self.ttl:
             return
@@ -228,16 +245,16 @@ class _IndexCache:
         logger.debug(f"Finished listing files in package '{package_name}'")
 
     def list_files(self, package_name: str) -> t.ValuesView[File]:
-        """List package files.
+        """List project files.
 
         Args:
-            package_name: name of package to list files of
+            package_name: name of project to list files of
 
         Returns:
-            files of package
+            files of project
 
         Raises:
-            NotFound: if package doesn't exist in index
+            NotFound: if project doesn't exist in index
         """
 
         with self._package_locks[package_name]:
@@ -248,15 +265,15 @@ class _IndexCache:
         """Get a file.
 
         Args:
-            package_name: package of file to get
+            package_name: project of file to get
             file_name: name of file to get
 
         Returns:
             local file URL
 
         Raises:
-            NotFound: if package doesn't exist in index or file doesn't
-                exist in package
+            NotFound: if project doesn't exist in index or file doesn't
+                exist in project
         """
 
         self.list_files(package_name)  # updates cache
@@ -276,12 +293,29 @@ class _IndexCache:
     def invalidate_package(self, package_name: str):
         """Invalidate package file list cache.
 
+        Deprecate: use ``invalidate_project``.
+
         Args:
             package_name: package name
         """
 
+        warnings.warn(
+            message="`invalidate_package` is deprecated, use `invalidate_project`",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.invalidate_project(package_name)
+
+    def invalidate_project(self, name: str) -> None:
+        """Invalidate project file list cache.
+
+        Args:
+            name: project name
+        """
+
+        package_name = name
         if self._package_locks[package_name].locked():
-            logger.info(f"Package '{package_name}' files already undergoing update")
+            logger.info(f"Project '{name}' files already undergoing update")
             return
         self._packages.pop(package_name, None)
 
@@ -489,7 +523,7 @@ class Cache:
     """Root index cache."""
 
     file_cache: _FileCache
-    """Downloaded package file cache."""
+    """Downloaded project file cache."""
 
     extra_caches: t.List[_IndexCache] = dataclasses.field(default_factory=list)
     """Extra indices' caches."""
@@ -517,26 +551,42 @@ class Cache:
     def list_packages(self) -> t.List[str]:
         """List all packages.
 
+        Deprecated: use ``list_projects``.
+
         Returns:
             names of all discovered packages
         """
 
-        packages = set(self.root_cache.list_packages())
+        warnings.warn(
+            message="`list_packages` is deprecated, use `list_projects`",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.list_projects()
+
+    def list_projects(self) -> t.List[str]:
+        """List all projects.
+
+        Returns:
+            names of all discovered projects
+        """
+
+        packages = set(self.root_cache.list_projects())
         for cache in self.extra_caches:
-            packages.update(cache.list_packages())
+            packages.update(cache.list_projects())
         return sorted(packages)
 
     def list_files(self, package_name: str) -> t.List[File]:
-        """List package files.
+        """List project files.
 
         Args:
-            package_name: name of package to list files of
+            package_name: name of project to list files of
 
         Returns:
-            files of package
+            files of project
 
         Raises:
-            NotFound: if package doesn't exist in any index
+            NotFound: if project doesn't exist in any index
         """
 
         files = []
@@ -563,15 +613,15 @@ class Cache:
         """Get a file.
 
         Args:
-            package_name: package of file to get
+            package_name: project of file to get
             file_name: name of file to get
 
         Returns:
             local file path, or original file URL if not yet available
 
         Raises:
-            NotFound: if package doesn't exist in any index or file doesn't
-                exist in package
+            NotFound: if project doesn't exist in any index or file doesn't
+                exist in project
         """
 
         try:
@@ -589,8 +639,8 @@ class Cache:
         return self.file_cache.get(url)
 
     def invalidate_list(self):
-        """Invalidate package list cache."""
-        logger.info("Invalidating package list cache.")
+        """Invalidate project list cache."""
+        logger.info("Invalidating project list cache.")
         self.root_cache.invalidate_list()
         for cache in self.extra_caches:
             cache.invalidate_list()
@@ -598,11 +648,27 @@ class Cache:
     def invalidate_package(self, package_name: str):
         """Invalidate package file list cache.
 
+        Deprecated: use ``invalidate_project``.
+
         Args:
             package_name: package name
         """
 
-        logger.info(f"Invalidating package '{package_name}' file list cache.")
-        self.root_cache.invalidate_package(package_name)
+        warnings.warn(
+            message="`invalidate_package` is deprecated, use `invalidate_project`",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.invalidate_project(package_name)
+
+    def invalidate_project(self, name: str) -> None:
+        """Invalidate project file-list cache.
+
+        Args:
+            name: project name
+        """
+
+        logger.info(f"Invalidating project '{name}' file list cache.")
+        self.root_cache.invalidate_project(name)
         for cache in self.extra_caches:
-            cache.invalidate_package(package_name)
+            cache.invalidate_project(name)

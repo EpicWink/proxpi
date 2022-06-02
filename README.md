@@ -8,8 +8,8 @@ https://codecov.io/gh/EpicWink/proxpi)
 PyPI caching mirror
 
 * Host a proxy PyPI mirror server with caching
-  * Cache the index (package list and packages' file list)
-  * Cache the package files
+  * Cache the index (project list and projects' file list)
+  * Cache the project files
 * Support multiple indices
 * Set index cache times-to-live (individually for each index)
 * Set files cache max-size on disk
@@ -66,9 +66,9 @@ change in a package index.
 * `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (comma-separated)
 * `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index cache times-to-live in seconds
    (comma-separated), default: 3 minutes, cache disabled when 0
-* `PROXPI_CACHE_SIZE`: size of downloaded package files cache (bytes), default 5GB.
+* `PROXPI_CACHE_SIZE`: size of downloaded project files cache (bytes), default 5GB.
   Disable files-cache by setting this to 0
-* `PROXPI_CACHE_DIR`: downloaded package files cache directory path, default: a new
+* `PROXPI_CACHE_DIR`: downloaded project files cache directory path, default: a new
   temporary directory
 
 ### Considerations with CI
@@ -84,8 +84,8 @@ Specifically, `proxpi` was designed to run for CI services such as
 [Azure Pipelines](https://azure.microsoft.com/en-us/services/devops/pipelines/)
 and [GitHub Actions](https://github.com/features/actions).
 
-`proxpi` works by caching index requests (ie which versions, wheel-types, etc) are
-available for a given package (the index cache) and the package files themselves (to a
+`proxpi` works by caching index requests (ie which versions, wheel-types, etc are
+available for a given project, the index cache) and the project files themselves (to a
 local directory, the package cache). This means they will cache identical requests after
 the first request, and will be useless for just one `pip install`.
 

@@ -1,7 +1,10 @@
 """Cached package index server."""
 
 import os
+import gzip
+import zlib
 import logging
+import typing as t
 import urllib.parse
 
 import flask
@@ -84,6 +87,23 @@ def _build_json_response(data: dict, version: str = "v1") -> flask.Response:
     return response
 
 
+def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
+    response = flask.make_response(response)
+    gzip_quality = flask.request.accept_encodings.quality("gzip")
+    zlib_quality = flask.request.accept_encodings.quality("deflate")
+    identity_quality = flask.request.accept_encodings.quality("identity")
+    if gzip_quality and gzip_quality >= identity_quality:
+        response.data = gzip.compress(response.data)
+        response.content_encoding = "gzip"
+    elif zlib_quality and zlib_quality >= identity_quality:
+        response.data = zlib.compress(response.data)
+        response.content_encoding = "gzip"
+    elif "identity" in flask.request.accept_encodings and not identity_quality:
+        flask.abort(406)
+    response.vary = (", " if response.vary else "") + "Accept-Encoding"
+    return response
+
+
 @app.route("/")
 def index():
     """Home page."""
@@ -107,12 +127,12 @@ def list_packages():
             "packages.html", package_names=package_names
         ))
     response.vary = (", " if response.vary else "") + "Accept"
-    return response
+    return _compress(response)
 
 
 @app.route("/index/<package_name>/")
 def list_files(package_name: str):
-    """List all files for a package."""
+    """List all files for a project."""
     try:
         files = cache.list_files(package_name)
     except _cache.NotFound:
@@ -145,7 +165,7 @@ def list_files(package_name: str):
         ))
 
     response.vary = (", " if response.vary else "") + "Accept"
-    return response
+    return _compress(response)
 
 
 @app.route("/index/<package_name>/<file_name>")
@@ -164,13 +184,13 @@ def get_file(package_name: str, file_name: str):
 
 @app.route("/cache/list", methods=["DELETE"])
 def invalidate_list():
-    """Invalidate package list cache."""
+    """Invalidate project list cache."""
     cache.invalidate_list()
     return {"status": "success", "data": None}
 
 
 @app.route("/cache/<package_name>", methods=["DELETE"])
 def invalidate_package(package_name):
-    """Invalidate package file list cache."""
-    cache.invalidate_package(package_name)
+    """Invalidate project file list cache."""
+    cache.invalidate_project(package_name)
     return {"status": "success", "data": None}
