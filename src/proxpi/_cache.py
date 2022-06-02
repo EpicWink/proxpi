@@ -222,7 +222,7 @@ class _IndexCache:
             url = urllib.parse.urljoin(self.index_url, package_name)
             response = self.session.get(url)
         if not response or not response.ok:
-            if package_name not in self.list_packages():
+            if package_name not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
