@@ -30,7 +30,7 @@ for package_name in package_names:
         )
         continue
     assert response.headers["Content-Encoding"] in ("gzip", "deflate")
-    html_length = round(int(response.headers["Content-Length"]) / 1024, 1)
+    html_length = response.headers["Content-Length"]
 
     response = requests.get(
         f"http://localhost:5042/index/{package_name}/", headers={
@@ -39,10 +39,14 @@ for package_name in package_names:
     )
     assert response.headers["Content-Encoding"] in ("gzip", "deflate")
     response.raise_for_status()
-    json_length = round(int(response.headers["Content-Length"]) / 1024, 1)
+    json_length = response.headers["Content-Length"]
 
-    ratios.append(json_length / html_length)
-    ratio = round(ratios[-1], 2)
+    ratio = json_length / html_length
+    ratios.append(ratio)
+
+    html_length = round(int(html_length) / 1024, 1)
+    json_length = round(int(json_length) / 1024, 1)
+    ratio = round(ratio, 2)
     print(f"| {package_name} | {html_length} | {json_length} | {ratio} |")
 
 mean_ratio = sum(ratios) / len(ratios)
