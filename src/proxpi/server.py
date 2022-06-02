@@ -115,8 +115,8 @@ def index():
 
 @app.route("/index/")
 def list_packages():
-    """List all packages in index(es)."""
-    package_names = cache.list_packages()
+    """List all projects in index(es)."""
+    package_names = cache.list_projects()
     if _wants_json():
         response = _build_json_response({
             "meta": {"api-version": "1.0"},
