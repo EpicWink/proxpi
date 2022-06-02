@@ -71,12 +71,12 @@ def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
     gzip_quality = flask.request.accept_encodings.quality("gzip")
     zlib_quality = flask.request.accept_encodings.quality("deflate")
     identity_quality = flask.request.accept_encodings.quality("identity")
-    if gzip_quality and gzip_quality >= identity_quality:
+    if gzip_quality and gzip_quality >= max(identity_quality, zlib_quality):
         response.data = gzip.compress(response.data)
         response.content_encoding = "gzip"
     elif zlib_quality and zlib_quality >= identity_quality:
         response.data = zlib.compress(response.data)
-        response.content_encoding = "gzip"
+        response.content_encoding = "deflate"
     elif "identity" in flask.request.accept_encodings and not identity_quality:
         flask.abort(406)
     response.vary = (", " if response.vary else "") + "Accept-Encoding"
