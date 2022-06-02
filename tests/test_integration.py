@@ -118,8 +118,7 @@ def test_package_json(server, accept):
     assert "Accept" in response.headers["Vary"]
     assert response.json()["meta"] == {"api-version": "1.0"}
     assert response.json()["name"] == "simplejson"
-    assert all(f["filename"] for f in response.json()["files"])
-    assert all(f["url"] for f in response.json()["files"])
+    assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
     assert all("hashes" in f for f in response.json()["files"])
 
 

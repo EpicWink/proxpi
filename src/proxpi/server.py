@@ -122,7 +122,7 @@ def list_files(package_name: str):
     if _wants_json():
         files_data = []
         for file in files:
-            file_data = {"filename": file.name, "url": file.url, "hashes": {}}
+            file_data = {"filename": file.name, "url": file.name, "hashes": {}}
             for part in file.fragment.split(","):
                 try:
                     hash_name, hash_value = part.split("=")
