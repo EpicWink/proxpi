@@ -1,7 +1,10 @@
 """Cached package index server."""
 
 import os
+import gzip
+import zlib
 import logging
+import typing as t
 import urllib.parse
 
 import flask
@@ -63,6 +66,23 @@ if app.debug or app.testing:
 logger.info("Cache: %r", cache)
 
 
+def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
+    response = flask.make_response(response)
+    gzip_quality = flask.request.accept_encodings.quality("gzip")
+    zlib_quality = flask.request.accept_encodings.quality("deflate")
+    identity_quality = flask.request.accept_encodings.quality("identity")
+    if gzip_quality and gzip_quality >= identity_quality:
+        response.data = gzip.compress(response.data)
+        response.content_encoding = "gzip"
+    elif zlib_quality and zlib_quality >= identity_quality:
+        response.data = zlib.compress(response.data)
+        response.content_encoding = "gzip"
+    elif "identity" in flask.request.accept_encodings and not identity_quality:
+        flask.abort(406)
+    response.vary = (", " if response.vary else "") + "Accept-Encoding"
+    return response
+
+
 @app.route("/")
 def index():
     """Home page."""
@@ -76,7 +96,8 @@ def index():
 def list_packages():
     """List all projects in index(es)."""
     package_names = cache.list_projects()
-    return flask.render_template("packages.html", package_names=package_names)
+    text = flask.render_template("packages.html", package_names=package_names)
+    return _compress(text)
 
 
 @app.route("/index/<package_name>/")
@@ -87,7 +108,8 @@ def list_files(package_name: str):
     except _cache.NotFound:
         flask.abort(404)
         raise
-    return flask.render_template("files.html", package_name=package_name, files=files)
+    text = flask.render_template("files.html", package_name=package_name, files=files)
+    return _compress(text)
 
 
 @app.route("/index/<package_name>/<file_name>")

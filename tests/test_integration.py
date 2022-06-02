@@ -120,6 +120,10 @@ def test_list(server):
     response = requests.get("http://127.0.0.1:5042/index/")
     response.raise_for_status()
 
+    for compression_algorithm in ["gzip", "deflate"]:
+        if compression_algorithm in response.request.headers["Accept-Encoding"]:
+            assert response.headers["Content-Encoding"] == compression_algorithm
+
     parser = IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
     assert parser.title.strip()  # required for valid HTML5
@@ -135,6 +139,10 @@ def test_package(server, project):
     project_url = f"http://127.0.0.1:5042/index/{project}/"
     response = requests.get(project_url)
     response.raise_for_status()
+
+    for compression_algorithm in ["gzip", "deflate"]:
+        if compression_algorithm in response.request.headers["Accept-Encoding"]:
+            assert response.headers["Content-Encoding"] == compression_algorithm
 
     parser = IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
