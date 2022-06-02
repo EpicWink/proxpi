@@ -123,9 +123,11 @@ def test_list(server, accept):
 
     assert response.headers["Content-Type"][:9] == "text/html"
     assert "Accept" in response.headers["Vary"]
-    for compression_algorithm in ["gzip", "deflate"]:
-        if compression_algorithm in response.request.headers["Accept-Encoding"]:
-            assert response.headers["Content-Encoding"] == compression_algorithm
+    assert any(
+        response.headers["Content-Encoding"] == a
+        for a in ["gzip", "deflate"]
+        if a in response.request.headers["Accept-Encoding"]
+    )
 
     parser = IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
@@ -162,9 +164,11 @@ def test_package(server, project, accept):
 
     assert response.headers["Content-Type"][:9] == "text/html"
     assert "Accept" in response.headers["Vary"]
-    for compression_algorithm in ["gzip", "deflate"]:
-        if compression_algorithm in response.request.headers["Accept-Encoding"]:
-            assert response.headers["Content-Encoding"] == compression_algorithm
+    assert any(
+        response.headers["Content-Encoding"] == a
+        for a in ["gzip", "deflate"]
+        if a in response.request.headers["Accept-Encoding"]
+    )
 
     parser = IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
