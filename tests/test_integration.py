@@ -80,11 +80,11 @@ class Thread(threading.Thread):
 @pytest.fixture(scope="module")
 def server():
     server = werkzeug_serving.make_server(
-        host="127.0.0.1", port=5042, app=proxpi_server.app
+        host="localhost", port=0, app=proxpi_server.app
     )
     thread = Thread(target=server.serve_forever)
     thread.start()
-    yield
+    yield f"http://localhost:{server.port}"
     server.shutdown()
     thread.join(timeout=0.1)
     if thread.exc:
@@ -98,7 +98,7 @@ def test_pip_download(server, tmp_path):
         "--no-cache-dir",
         "download",
         "--index-url",
-        "http://127.0.0.1:5042/index/",
+        f"{server}/index/",
     ]
     p = subprocess.run(
         [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"]
@@ -117,7 +117,7 @@ def test_pip_download(server, tmp_path):
 
 def test_list(server):
     """Test getting package list."""
-    response = requests.get("http://127.0.0.1:5042/index/")
+    response = requests.get(f"{server}/index/")
     response.raise_for_status()
 
     assert any(
@@ -138,7 +138,7 @@ def test_list(server):
 @pytest.mark.parametrize("project", ["proxpi", "numpy"])
 def test_package(server, project):
     """Test getting package files."""
-    project_url = f"http://127.0.0.1:5042/index/{project}/"
+    project_url = f"{server}/index/{project}/"
     response = requests.get(project_url)
     response.raise_for_status()
 
@@ -192,33 +192,33 @@ def test_package(server, project):
 
 def test_invalidate_list(server):
     """Test invalidating package list cache."""
-    response = requests.delete("http://127.0.0.1:5042/cache/list")
+    response = requests.delete(f"{server}/cache/list")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "data": None}
 
 
 def test_invalidate_package(server):
     """Test invalidating package list cache."""
-    response = requests.delete("http://127.0.0.1:5042/cache/jinja2")
+    response = requests.delete(f"{server}/cache/jinja2")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "data": None}
 
 
 def test_nonexistant_package(server):
     """Test getting non-existant package file list."""
-    response = requests.get("http://127.0.0.1:5042/index/ultraspampackage/")
+    response = requests.get(f"{server}/index/ultraspampackage/")
     assert response.status_code == 404
 
 
 def test_nonexistant_file(server):
     """Test getting non-existant package file."""
-    response = requests.get("http://127.0.0.1:5042/index/ultraspampackage/spam.whl")
+    response = requests.get(f"{server}/index/ultraspampackage/spam.whl")
     assert response.status_code == 404
 
 
 def test_nonexistant_file_from_existing_package(server):
     """Test getting non-existant package file from existing package."""
-    response = requests.get("http://127.0.0.1:5042/index/Jinja2/nonexistant.whl")
+    response = requests.get(f"{server}/index/Jinja2/nonexistant.whl")
     assert response.status_code == 404
 
 
@@ -231,7 +231,7 @@ def test_download_file_failed(server, tmp_path):
     )
     with cache_patch, dir_patch:
         response = requests.get(
-            "http://127.0.0.1:5042/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
+            f"{server}/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
             allow_redirects=False,
         )
     assert response.status_code // 100 == 3
@@ -249,7 +249,7 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
     )
     with file_mime_type_patch:
         response = requests.get(
-            "http://127.0.0.1:5042/index/proxpi/proxpi-1.0.0.tar.gz",
+            f"{server}/index/proxpi/proxpi-1.0.0.tar.gz",
             allow_redirects=False,
         )
     assert response.status_code == 200
