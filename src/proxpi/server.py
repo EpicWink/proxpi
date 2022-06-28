@@ -66,7 +66,6 @@ if app.debug or app.testing:
             handler.level = logging.DEBUG
 logger.info("Cache: %r", cache)
 KNOWN_LATEST_JSON_VERSION = "v1"
-KNOWN_DATASET_KEYS = ["requires-python", "dist-info-metadata", "gpg-sig", "yanked"]
 
 
 def _wants_json(version: str = "v1") -> bool:
@@ -185,16 +184,8 @@ def list_files(package_name: str):
     if _wants_json():
         files_data = []
         for file in files:
-            file_data = {"filename": file.name, "url": file.name, "hashes": {}}
-            for part in file.fragment.split(","):
-                try:
-                    hash_name, hash_value = part.split("=")
-                except ValueError:
-                    continue
-                file_data["hashes"][hash_name] = hash_value
-            for data_set_key in KNOWN_DATASET_KEYS:
-                if f"data-{data_set_key}" in file.attributes:
-                    file_data[data_set_key] = file.attributes[f"data-{data_set_key}"]
+            file_data = file.to_json_response()
+            file_data["url"] = file.name
             files_data.append(file_data)
         response = _build_json_response(
             data={
