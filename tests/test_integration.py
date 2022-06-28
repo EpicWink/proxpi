@@ -80,11 +80,11 @@ class Thread(threading.Thread):
 @pytest.fixture(scope="module")
 def server():
     server = werkzeug_serving.make_server(
-        host="127.0.0.1", port=5042, app=proxpi_server.app
+        host="localhost", port=0, app=proxpi_server.app
     )
     thread = Thread(target=server.serve_forever)
     thread.start()
-    yield
+    yield f"http://localhost:{server.port}"
     server.shutdown()
     thread.join(timeout=0.1)
     if thread.exc:
@@ -98,7 +98,7 @@ def test_pip_download(server, tmp_path):
         "--no-cache-dir",
         "download",
         "--index-url",
-        "http://127.0.0.1:5042/index/",
+        f"{server}/index/",
     ]
     p = subprocess.run(
         [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"]
@@ -118,7 +118,7 @@ def test_pip_download(server, tmp_path):
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
 def test_list(server, accept):
     """Test getting package list."""
-    response = requests.get("http://127.0.0.1:5042/index/", headers={"Accept": accept})
+    response = requests.get(f"{server}/index/", headers={"Accept": accept})
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
@@ -160,7 +160,7 @@ def test_list_json(server, accept):
 ])
 def test_package(server, project, accept):
     """Test getting package files."""
-    project_url = f"http://127.0.0.1:5042/index/{project}/"
+    project_url = f"{server}/index/{project}/"
     response = requests.get(project_url, headers={"Accept": accept})
     response.raise_for_status()
 
@@ -253,33 +253,33 @@ def test_package_unknown_accept(server):
 
 def test_invalidate_list(server):
     """Test invalidating package list cache."""
-    response = requests.delete("http://127.0.0.1:5042/cache/list")
+    response = requests.delete(f"{server}/cache/list")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "data": None}
 
 
 def test_invalidate_package(server):
     """Test invalidating package list cache."""
-    response = requests.delete("http://127.0.0.1:5042/cache/jinja2")
+    response = requests.delete(f"{server}/cache/jinja2")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "data": None}
 
 
 def test_nonexistant_package(server):
     """Test getting non-existant package file list."""
-    response = requests.get("http://127.0.0.1:5042/index/ultraspampackage/")
+    response = requests.get(f"{server}/index/ultraspampackage/")
     assert response.status_code == 404
 
 
 def test_nonexistant_file(server):
     """Test getting non-existant package file."""
-    response = requests.get("http://127.0.0.1:5042/index/ultraspampackage/spam.whl")
+    response = requests.get(f"{server}/index/ultraspampackage/spam.whl")
     assert response.status_code == 404
 
 
 def test_nonexistant_file_from_existing_package(server):
     """Test getting non-existant package file from existing package."""
-    response = requests.get("http://127.0.0.1:5042/index/Jinja2/nonexistant.whl")
+    response = requests.get(f"{server}/index/Jinja2/nonexistant.whl")
     assert response.status_code == 404
 
 
@@ -292,10 +292,32 @@ def test_download_file_failed(server, tmp_path):
     )
     with cache_patch, dir_patch:
         response = requests.get(
-            "http://127.0.0.1:5042/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
+            f"{server}/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
             allow_redirects=False,
         )
     assert response.status_code // 100 == 3
     url_parsed = urllib_parse.urlsplit(response.headers["location"])
     assert url_parsed.netloc == "files.pythonhosted.org"
     assert posixpath.split(url_parsed.path)[1] == "Jinja2-2.11.1-py2.py3-none-any.whl"
+
+
+@pytest.mark.parametrize("file_mime_type", ["application/octet-stream", None])
+def test_download_file_representation(server, tmp_path, file_mime_type):
+    """Test package file content type and encoding."""
+    (tmp_path / "packages").mkdir()
+    file_mime_type_patch = mock.patch.object(
+        proxpi_server, "_file_mime_type", file_mime_type
+    )
+    with file_mime_type_patch:
+        response = requests.get(
+            f"{server}/index/proxpi/proxpi-1.0.0.tar.gz",
+            allow_redirects=False,
+        )
+    assert response.status_code == 200
+    if file_mime_type:
+        assert response.headers["Content-Type"] == "application/octet-stream"
+        assert not response.headers.get("Content-Encoding")
+    else:
+        assert response.headers["Content-Type"] == "application/x-tar"
+        assert response.headers["Content-Encoding"] == "gzip"
+    response.close()

@@ -278,9 +278,19 @@ class _IndexCache:
 
         self.list_files(package_name)  # updates cache
         package = self._packages[package_name]
-        if file_name not in package.files:
+        is_metadata = file_name[-9:] == ".metadata"
+        file = package.files.get(file_name[:-9] if is_metadata else file_name)
+        if not file:
             raise NotFound(file_name)
-        return package.files[file_name].url
+        url = file.url
+        if is_metadata:
+            # Note: don't validate if file has 'data-dist-info-metadata' attribute, let
+            # the source index provide the 404
+            scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
+            url = urllib.parse.urlunsplit(
+                (scheme, netloc, path + ".metadata", query, fragment),
+            )
+        return url
 
     def invalidate_list(self):
         """Invalidate package list cache."""
@@ -455,7 +465,7 @@ class _FileCache:
                 logger.error(f"Failed to download '{url_masked}'", exc_info=e)
                 return True
             if isinstance(self._files[url], Thread):
-                return True  # default to original URL (due to timeout)
+                return True  # default to original URL (due to timeout or HTTP error)
         return False
 
     def _get_cached(self, url: str) -> t.Union[str, None]:

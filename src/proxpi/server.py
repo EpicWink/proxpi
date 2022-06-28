@@ -122,6 +122,11 @@ def _build_json_response(data: dict, version: str = "v1") -> flask.Response:
     response.mimetype = f"application/vnd.pypi.simple.{version}+json"
     return response
 
+BINARY_FILE_MIME_TYPE = (
+    os.environ.get("PROXPI_BINARY_FILE_MIME_TYPE", "")
+).lower() not in ("", "0", "no", "off", "false")
+_file_mime_type = "application/octet-stream" if BINARY_FILE_MIME_TYPE else None
+
 
 def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
     response = flask.make_response(response)
@@ -219,7 +224,7 @@ def get_file(package_name: str, file_name: str):
     scheme = urllib.parse.urlparse(path).scheme
     if scheme and scheme != "file":
         return flask.redirect(path)
-    return flask.send_file(path)
+    return flask.send_file(path, mimetype=_file_mime_type)
 
 
 @app.route("/cache/list", methods=["DELETE"])
