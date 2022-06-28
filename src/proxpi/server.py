@@ -9,6 +9,7 @@ import urllib.parse
 
 import flask
 import jinja2
+import werkzeug.exceptions
 
 from . import _cache
 
@@ -69,15 +70,50 @@ KNOWN_DATASET_KEYS = ["requires-python", "dist-info-metadata", "gpg-sig", "yanke
 
 
 def _wants_json(version: str = "v1") -> bool:
-    if version == KNOWN_LATEST_JSON_VERSION and _wants_json("latest"):
-        return True
+    """Determine if client wants a JSON response.
+
+    First checks `format` request query paramater, and if its value is a
+    known content-type, decides if client wants JSON. Then falls back to
+    HTTP content-negotiation, where the decision is based on the quality
+    of the JSON content-type (JSON must be equally or more preferred to
+    HTML, but strictly more preferred to 'text/html').
+
+    Args:
+        version: PyPI JSON response content-type version
+    """
+
+    if version == KNOWN_LATEST_JSON_VERSION:
+        try:
+            wants_json = _wants_json("latest")
+        except werkzeug.exceptions.NotAcceptable:
+            pass
+        else:
+            if wants_json:
+                return True
+
     json_key = f"application/vnd.pypi.simple.{version}+json"
-    if flask.request.args.get("format") == json_key:
-        return True
+    html_keys = {
+        "text/html",
+        "application/vnd.pypi.simple.v1+html",
+        "application/vnd.pypi.simple.latest+html",
+    }
+
+    if flask.request.args.get("format"):
+        if flask.request.args["format"] == json_key:
+            return True
+        elif flask.request.args["format"] in html_keys:
+            return False
+
     json_quality = flask.request.accept_mimetypes.quality(json_key)
-    return json_quality and json_quality >= max(
-        flask.request.accept_mimetypes.quality("text/html"),
-        flask.request.accept_mimetypes.quality("application/vnd.pypi.simple.v1+html"),
+    html_quality = max(flask.request.accept_mimetypes.quality(k) for k in html_keys)
+    iana_html_quality = flask.request.accept_mimetypes.quality("text/html")
+
+    if not json_quality and not html_quality:
+        flask.abort(406)
+    return (
+        json_quality
+        and json_quality >= html_quality
+        and json_quality > iana_html_quality
     )
 
 

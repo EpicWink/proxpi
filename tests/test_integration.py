@@ -155,7 +155,9 @@ def test_list_json(server, accept):
 
 
 @pytest.mark.parametrize("project", ["proxpi", "numpy"])
-@pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
+@pytest.mark.parametrize("accept", [
+    "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
+])
 def test_package(server, project, accept):
     """Test getting package files."""
     project_url = f"http://127.0.0.1:5042/index/{project}/"
@@ -216,11 +218,19 @@ def test_package(server, project, accept):
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
-def test_package_json(server, accept):
+@pytest.mark.parametrize("query_format", [False, True])
+def test_package_json(server, accept, query_format):
     """Test getting package files with JSON API."""
+    params = None
+    headers = None
+    if query_format:
+        params = {"format": accept}
+    else:
+        headers = {"Accept": accept}
     response = requests.get(
-        "http://127.0.0.1:5042/index/simplejson/", headers={"Accept": accept}
+        "http://127.0.0.1:5042/index/simplejson/", params=params, headers=headers
     )
+
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (
         "application/vnd.pypi.simple.v1+json"
@@ -230,6 +240,15 @@ def test_package_json(server, accept):
     assert response.json()["name"] == "simplejson"
     assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
     assert all("hashes" in f for f in response.json()["files"])
+
+
+def test_package_unknown_accept(server):
+    """Test getting package files raises 406 with unknown accept-type."""
+    response = requests.get(
+        "http://127.0.0.1:5042/index/simplejson/",
+        headers={"Accept": "application/vnd.pypi.simple.v42+xml"}
+    )
+    assert response.status_code == 406
 
 
 def test_invalidate_list(server):
