@@ -157,7 +157,7 @@ def list_packages():
         response = _build_json_response(
             data={
                 "meta": {"api-version": "1.0"},
-                "projects": {n: {"url": f"{n}/"} for n in package_names},
+                "projects": [{"name": n} for n in package_names],
             },
         )
     else:

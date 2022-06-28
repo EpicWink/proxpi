@@ -151,7 +151,7 @@ def test_list_json(server, accept):
     )
     assert "Accept" in response.headers["Vary"]
     assert response.json()["meta"] == {"api-version": "1.0"}
-    assert response.json()["projects"]["simplejson"] == {"url": "simplejson/"}
+    assert any(p == {"name": "simplejson"} for p in response.json()["projects"])
 
 
 @pytest.mark.parametrize("project", ["proxpi", "numpy"])
