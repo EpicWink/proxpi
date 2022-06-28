@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import warnings
 import posixpath
 import threading
 import subprocess
@@ -283,12 +284,23 @@ def test_nonexistant_file_from_existing_package(server):
     assert response.status_code == 404
 
 
-def test_download_file_failed(server, tmp_path):
+@pytest.fixture
+def readonly_package_dir(tmp_path):
+    package_dir = tmp_path / "packages"
+    package_dir.mkdir(mode=0o555)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", pytest.PytestUnhandledThreadExceptionWarning)
+        try:
+            yield package_dir
+        finally:
+            (tmp_path / "packages").chmod(0o755)  # allow clean-up
+
+
+def test_download_file_failed(server, readonly_package_dir):
     """Test getting package file when caching failed."""
-    (tmp_path / "packages").mkdir(mode=0o555)  # read-only directory
     cache_patch = mock.patch.object(proxpi_server.cache.file_cache, "_files", {})
     dir_patch = mock.patch.object(
-        proxpi_server.cache.file_cache, "cache_dir", str(tmp_path / "packages")
+        proxpi_server.cache.file_cache, "cache_dir", str(readonly_package_dir)
     )
     with cache_patch, dir_patch:
         response = requests.get(
