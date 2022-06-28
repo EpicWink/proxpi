@@ -145,7 +145,7 @@ def test_list(server, accept):
 ])
 def test_list_json(server, accept):
     """Test getting package list with JSON API."""
-    response = requests.get("http://127.0.0.1:5042/index/", headers={"Accept": accept})
+    response = requests.get(f"{server}/index/", headers={"Accept": accept})
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (
         "application/vnd.pypi.simple.v1+json"
@@ -229,7 +229,7 @@ def test_package_json(server, accept, query_format):
     else:
         headers = {"Accept": accept}
     response = requests.get(
-        "http://127.0.0.1:5042/index/simplejson/", params=params, headers=headers
+        f"{server}/index/simplejson/", params=params, headers=headers
     )
 
     assert response.status_code == 200
@@ -246,7 +246,7 @@ def test_package_json(server, accept, query_format):
 def test_package_unknown_accept(server):
     """Test getting package files raises 406 with unknown accept-type."""
     response = requests.get(
-        "http://127.0.0.1:5042/index/simplejson/",
+        f"{server}/index/simplejson/",
         headers={"Accept": "application/vnd.pypi.simple.v42+xml"}
     )
     assert response.status_code == 406
