@@ -121,6 +121,7 @@ def _build_json_response(data: dict, version: str = "v1") -> flask.Response:
     response.mimetype = f"application/vnd.pypi.simple.{version}+json"
     return response
 
+
 BINARY_FILE_MIME_TYPE = (
     os.environ.get("PROXPI_BINARY_FILE_MIME_TYPE", "")
 ).lower() not in ("", "0", "no", "off", "false")
