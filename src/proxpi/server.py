@@ -84,7 +84,7 @@ def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
         response.content_encoding = "deflate"
     elif "identity" in flask.request.accept_encodings and not identity_quality:
         flask.abort(406)
-    response.vary = (", " if response.vary else "") + "Accept-Encoding"
+    response.vary.add("Accept-Encoding")
     return response
 
 
