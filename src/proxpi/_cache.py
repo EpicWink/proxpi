@@ -170,7 +170,9 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(self.index_url)
+        response = self.session.get(
+            self.index_url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+        )
         response.raise_for_status()
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
@@ -220,13 +222,18 @@ class _IndexCache:
         response = None
         if time.monotonic() > (self._index_t or 0.0) + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
-            response = self.session.get(url)
+            response = self.session.get(
+                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+            )
+
         if not response or not response.ok:
             if package_name not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(url)
+            response = self.session.get(
+                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+            )
             response.raise_for_status()
 
         package = Package(package_name, files={}, refreshed=time.monotonic())
@@ -545,6 +552,10 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        proxpi_version = get_proxpi_version()
+        if proxpi_version:
+            session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
+
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
@@ -553,7 +564,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl)
+            cls._index_cache_cls(url, ttl, session)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
@@ -682,3 +693,16 @@ class Cache:
         self.root_cache.invalidate_project(name)
         for cache in self.extra_caches:
             cache.invalidate_project(name)
+
+
+@functools.lru_cache(maxsize=None)
+def get_proxpi_version() -> t.Union[str, None]:
+    try:
+        import importlib.metadata
+    except ImportError:
+        return None
+    else:
+        try:
+            return importlib.metadata.version("proxpi")
+        except importlib.metadata.PackageNotFoundError:
+            return None

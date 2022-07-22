@@ -30,15 +30,8 @@ else:  # pragma: no cover
     )
 logger = logging.getLogger(__name__)
 
-try:
-    import importlib.metadata
-except ImportError:
-    importlib = None
-else:
-    try:
-        logger.info(f"proxpi version: {importlib.metadata.version('proxpi')}")
-    except importlib.metadata.PackageNotFoundError:
-        pass
+_proxpi_version = _cache.get_proxpi_version()
+logger.info(f"proxpi version: {_proxpi_version or '<unknown>'}")
 
 try:
     import gunicorn.glogging
@@ -142,7 +135,7 @@ def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
         response.content_encoding = "deflate"
     elif "identity" in flask.request.accept_encodings and not identity_quality:
         flask.abort(406)
-    response.vary = (", " if response.vary else "") + "Accept-Encoding"
+    response.vary.add("Accept-Encoding")
     return response
 
 

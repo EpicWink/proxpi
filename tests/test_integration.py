@@ -129,6 +129,8 @@ def test_list(server, accept):
         for a in ["gzip", "deflate"]
         if a in response.request.headers["Accept-Encoding"]
     )
+    vary = {v.strip() for v in response.headers["Vary"].split(",")}
+    assert "Accept-Encoding" in vary
 
     parser = IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
