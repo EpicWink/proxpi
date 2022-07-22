@@ -501,6 +501,10 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        proxpi_version = get_proxpi_version()
+        if proxpi_version:
+            session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
+
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
@@ -509,7 +513,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl)
+            cls._index_cache_cls(url, ttl, session)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
@@ -606,3 +610,16 @@ class Cache:
         self.root_cache.invalidate_package(package_name)
         for cache in self.extra_caches:
             cache.invalidate_package(package_name)
+
+
+@functools.lru_cache(maxsize=None)
+def get_proxpi_version() -> t.Union[str, None]:
+    try:
+        import importlib.metadata
+    except ImportError:
+        return None
+    else:
+        try:
+            return importlib.metadata.version("proxpi")
+        except importlib.metadata.PackageNotFoundError:
+            return None

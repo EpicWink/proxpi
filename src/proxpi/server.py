@@ -26,15 +26,8 @@ else:  # pragma: no cover
     )
 logger = logging.getLogger(__name__)
 
-try:
-    import importlib.metadata
-except ImportError:
-    importlib = None
-else:
-    try:
-        logger.info(f"proxpi version: {importlib.metadata.version('proxpi')}")
-    except importlib.metadata.PackageNotFoundError:
-        pass
+_proxpi_version = _cache.get_proxpi_version()
+logger.info(f"proxpi version: {_proxpi_version or '<unknown>'}")
 
 try:
     import gunicorn.glogging
