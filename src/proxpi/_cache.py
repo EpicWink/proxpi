@@ -170,7 +170,9 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(self.index_url)
+        response = self.session.get(
+            self.index_url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+        )
         response.raise_for_status()
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = time.monotonic()
@@ -220,13 +222,18 @@ class _IndexCache:
         response = None
         if time.monotonic() > (self._index_t or 0.0) + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
-            response = self.session.get(url)
+            response = self.session.get(
+                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+            )
+
         if not response or not response.ok:
             if package_name not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(url)
+            response = self.session.get(
+                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
+            )
             response.raise_for_status()
 
         package = Package(package_name, files={}, refreshed=time.monotonic())
