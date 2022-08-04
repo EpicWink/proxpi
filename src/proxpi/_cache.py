@@ -333,9 +333,9 @@ class _IndexCache:
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
                 self._index[project["name"]] = f"{name_normalised}/"
-                logger.debug(
-                    f"Finished listing packages in index '{self._index_url_masked}'",
-                )
+            logger.debug(
+                f"Finished listing packages in index '{self._index_url_masked}'",
+            )
             return
 
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
