@@ -332,7 +332,7 @@ class _IndexCache:
             response_data = response.json()
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
-                self._index[project["name"]] = f"{name_normalised}/"
+                self._index[name_normalised] = f"{name_normalised}/"
             logger.debug(
                 f"Finished listing packages in index '{self._index_url_masked}'",
             )
@@ -388,7 +388,8 @@ class _IndexCache:
             response = self.session.get(url, headers=self._headers)
         if not response or not response.ok:
             logger.debug(f"List-files response: {response}")
-            if package_name not in self.list_projects():
+            package_name_normalised = _name_normalise_re.sub("-", package_name).lower()
+            if package_name_normalised not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
