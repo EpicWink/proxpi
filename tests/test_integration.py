@@ -1,51 +1,182 @@
 """Test ``proxpi`` server."""
 
+import io
+import os
 import hashlib
 import logging
+import tarfile
 import warnings
 import posixpath
-import subprocess
+import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
 
-from proxpi import server as proxpi_server
+import flask
+import jinja2
 import pytest
 import requests
+import proxpi.server
 import packaging.specifiers
 
 from . import _utils
+
+proxpi_server = proxpi.server
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 
+def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Flask:
+    """Construct a mock package index app.
+
+    Warning: uses ``proxpi``'s templates for index responses, and files are
+    simple
+
+    Args:
+        projects: index projects with their files
+
+    Returns:
+        WSGI app for Python package simple repository index
+    """
+
+    files_content = {}
+    for project_name_, files_ in projects.items():
+        for file_ in files_:
+            stream = io.BytesIO()
+            with tarfile.TarFile.open(mode="w:gz", fileobj=stream) as tf:
+                tf.addfile(
+                    tarinfo=tarfile.TarInfo(name="spam"),
+                    fileobj=io.BytesIO(file_.url.encode(encoding="utf-8")),
+                )
+            file_content_ = stream.getvalue()
+            files_content[project_name_, file_.name] = file_content_
+            if file_.fragment:
+                assert file_.fragment == "sha256="
+                file_.fragment += hashlib.sha256(file_content_).hexdigest()
+
+    app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
+    app.jinja_loader = jinja2.PackageLoader("proxpi")
+
+    @app.route("/")
+    def list_projects() -> str:
+        return flask.render_template("packages.html", package_names=list(projects))
+
+    @app.route("/<name>/")
+    def get_project(name: str) -> str:
+        files = projects.get(name)
+        if not files:
+            flask.abort(404)
+        return flask.render_template("files.html", package_name=name, files=files)
+
+    @app.route("/<project_name>/<file_name>")
+    def get_file(project_name: str, file_name: str) -> bytes:
+        file_content = files_content.get((project_name, file_name))
+        if not file_content:
+            flask.abort(404)
+        return file_content
+
+    return app
+
+
 @pytest.fixture(scope="module")
-def server():
-    yield from _utils.make_server(proxpi_server.app)
+def mock_root_index():
+    app = make_mock_index_app(projects={
+        "proxpi": [
+            proxpi.File(
+                name="proxpi-1.1.0-py3-none-any.whl",
+                url="spam eggs 42",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.7"},
+            ),
+            proxpi.File(
+                name="proxpi-1.1.0.tar.gz",
+                url="foo bar 42",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.7"},
+            ),
+            proxpi.File(
+                name="proxpi-1.0.0-py3-none-any.whl",
+                url="spam eggs 41",
+                fragment="",
+                attributes={},
+            ),
+            proxpi.File(
+                name="proxpi-1.0.0.tar.gz",
+                url="foo bar 42",
+                fragment="",
+                attributes={},
+            ),
+        ],
+        "numpy": [
+            proxpi.File(
+                name="numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
+                url="",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.8"},
+            ),
+            proxpi.File(
+                name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
+                url="",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.8"},
+            ),
+            proxpi.File(
+                name="numpy-1.23.1.tar.gz",
+                url="foo bar 42",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.8"},
+            ),
+        ],
+    })  # fmt: skip
+    yield from _utils.make_server(app)
 
 
-def test_pip_download(server, tmp_path):
-    """Test package installation."""
-    args = [
-        "pip",
-        "--no-cache-dir",
-        "download",
-        "--index-url",
-        f"{server}/index/",
-    ]
-    p = subprocess.run(
-        [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"]
+@pytest.fixture(scope="module")
+def mock_extra_index():
+    app = make_mock_index_app(projects={
+        "scipy": [
+            proxpi.File(
+                name="scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
+                url="spam eggs 17",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.7"},
+            ),
+            proxpi.File(
+                name="scipy-1.9.0.tar.gz",
+                url="foo bar 17",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.7"},
+            ),
+        ],
+        "numpy": [
+            proxpi.File(
+                name="numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
+                url="spam eggs 40c",
+                fragment="sha256=",
+                attributes={"data-requires-python": ">=3.8"},
+            ),
+        ],
+    })  # fmt: skip
+    yield from _utils.make_server(app)
+
+
+@pytest.fixture(scope="module")
+def server(mock_root_index, mock_extra_index):
+    session = proxpi.server.cache.root_cache.session
+    # noinspection PyProtectedMember
+    root_patch = mock.patch.object(
+        proxpi.server.cache,
+        "root_cache",
+        proxpi.server.cache._index_cache_cls(f"{mock_root_index}/", 15, session),
     )
-    assert p.returncode == 0
-    contents = list((tmp_path / "dest1").iterdir())
-    print(contents)
-    assert any("jinja2" in p.name.lower() for p in contents)
-    assert any("marshmallow" in p.name.lower() for p in contents)
-    subprocess.run([*args, "--dest", str(tmp_path / "dest2"), "Jinja2"])
-    assert p.returncode == 0
-    contents = list((tmp_path / "dest2").iterdir())
-    print(contents)
-    assert any("jinja2" in p.name.lower() for p in contents)
+    # noinspection PyProtectedMember
+    extras_patch = mock.patch.object(
+        proxpi.server.cache,
+        "extra_caches",
+        [proxpi.server.cache._index_cache_cls(f"{mock_extra_index}/", 10, session)],
+    )
+    with root_patch, extras_patch:
+        yield from _utils.make_server(proxpi_server.app)
 
 
 def test_list(server):
@@ -169,7 +300,7 @@ def readonly_package_dir(tmp_path):
             (tmp_path / "packages").chmod(0o755)  # allow clean-up
 
 
-def test_download_file_failed(server, readonly_package_dir):
+def test_download_file_failed(mock_root_index, server, readonly_package_dir):
     """Test getting package file when caching failed."""
     cache_patch = mock.patch.object(proxpi_server.cache.file_cache, "_files", {})
     dir_patch = mock.patch.object(
@@ -177,13 +308,14 @@ def test_download_file_failed(server, readonly_package_dir):
     )
     with cache_patch, dir_patch:
         response = requests.get(
-            f"{server}/index/jinja2/Jinja2-2.11.1-py2.py3-none-any.whl",
+            f"{server}/index/numpy/numpy-1.23.1.tar.gz",
             allow_redirects=False,
         )
     assert response.status_code // 100 == 3
     url_parsed = urllib_parse.urlsplit(response.headers["location"])
-    assert url_parsed.netloc == "files.pythonhosted.org"
-    assert posixpath.split(url_parsed.path)[1] == "Jinja2-2.11.1-py2.py3-none-any.whl"
+    mock_root_index_parsed = urllib_parse.urlsplit(mock_root_index)
+    assert url_parsed.netloc == mock_root_index_parsed.netloc
+    assert posixpath.split(url_parsed.path)[1] == "numpy-1.23.1.tar.gz"
 
 
 @pytest.mark.parametrize("file_mime_type", ["application/octet-stream", None])
