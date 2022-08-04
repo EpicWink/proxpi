@@ -15,18 +15,21 @@ import flask
 import jinja2
 import pytest
 import requests
+import proxpi._cache  # noqa
 import proxpi.server
 import packaging.specifiers
 
 from . import _utils
 
 proxpi_server = proxpi.server
+# noinspection PyProtectedMember
+File = proxpi._cache.FileFromHTML
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 
-def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Flask:
+def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
     """Construct a mock package index app.
 
     Warning: uses ``proxpi``'s templates for index responses, and files are
@@ -82,25 +85,25 @@ def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Fla
 def mock_root_index():
     app = make_mock_index_app(projects={
         "proxpi": [
-            proxpi.File(
+            File(
                 name="proxpi-1.1.0-py3-none-any.whl",
                 url="spam eggs 42",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.1.0.tar.gz",
                 url="foo bar 42",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.0.0-py3-none-any.whl",
                 url="spam eggs 41",
                 fragment="",
                 attributes={},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.0.0.tar.gz",
                 url="foo bar 42",
                 fragment="",
@@ -108,19 +111,19 @@ def mock_root_index():
             ),
         ],
         "numpy": [
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
                 url="",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.8"},
             ),
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
                 url="",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.8"},
             ),
-            proxpi.File(
+            File(
                 name="numpy-1.23.1.tar.gz",
                 url="foo bar 42",
                 fragment="sha256=",
@@ -135,13 +138,13 @@ def mock_root_index():
 def mock_extra_index():
     app = make_mock_index_app(projects={
         "scipy": [
-            proxpi.File(
+            File(
                 name="scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
                 url="spam eggs 17",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="scipy-1.9.0.tar.gz",
                 url="foo bar 17",
                 fragment="sha256=",
@@ -149,7 +152,7 @@ def mock_extra_index():
             ),
         ],
         "numpy": [
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
                 url="spam eggs 40c",
                 fragment="sha256=",
