@@ -626,7 +626,7 @@ class Cache:
             for file in extra_files:
                 if file.name not in {f.name for f in files}:
                     files.append(file)
-        if exc:
+        if not files and exc:
             raise exc
         return files
 

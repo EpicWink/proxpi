@@ -201,7 +201,7 @@ def test_list(server):
         assert href == f"{text}/"
 
 
-@pytest.mark.parametrize("project", ["proxpi", "numpy"])
+@pytest.mark.parametrize("project", ["proxpi", "numpy", "scipy"])
 def test_package(server, project):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
