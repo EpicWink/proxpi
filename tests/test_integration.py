@@ -4,10 +4,7 @@ import hashlib
 import logging
 import warnings
 import posixpath
-import threading
 import subprocess
-import html.parser
-import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
 
@@ -15,81 +12,16 @@ from proxpi import server as proxpi_server
 import pytest
 import requests
 import packaging.specifiers
-from werkzeug import serving as werkzeug_serving
+
+from . import _utils
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 
-class IndexParser(html.parser.HTMLParser):
-    declaration: str
-    title: str
-    anchors: t.List[
-        t.Tuple[t.Union[str, None], t.List[t.Tuple[str, t.Union[str, None]]]]
-    ]
-    _tag_chain: t.List[t.Tuple[str, t.List[t.Tuple[str, t.Union[str, None]]]]]
-    _current_text: t.Union[str, None] = None
-
-    def __init__(self):
-        super().__init__()
-        self._tag_chain = []
-        self.anchors = []
-
-    @classmethod
-    def from_text(cls, text: str) -> "IndexParser":
-        parser = cls()
-        parser.feed(text)
-        parser.close()
-        return parser
-
-    def handle_decl(self, decl):
-        self.declaration = decl
-
-    def handle_starttag(self, tag, attrs):
-        self._tag_chain.append((tag, attrs))
-        if self._current_text:
-            self._current_text = None
-
-    def handle_data(self, data):
-        self._current_text = data
-
-    def handle_endtag(self, tag):
-        if tag == "a":
-            if self._tag_chain and self._tag_chain[-1][0] == "a":
-                _, attributes = self._tag_chain[-1]
-                self.anchors.append((self._current_text, attributes))
-        elif tag == "title":
-            if self._tag_chain and self._tag_chain[-1][0] == "title":
-                self.title = self._current_text
-        while self._tag_chain:
-            start_tag, _ = self._tag_chain.pop()
-            if start_tag == tag:
-                break
-        self._current_text = None
-
-
-class Thread(threading.Thread):
-    exc = None
-
-    def run(self):
-        try:
-            super().run()
-        except Exception as e:
-            self.exc = e
-
-
 @pytest.fixture(scope="module")
 def server():
-    server = werkzeug_serving.make_server(
-        host="localhost", port=0, app=proxpi_server.app
-    )
-    thread = Thread(target=server.serve_forever)
-    thread.start()
-    yield f"http://localhost:{server.port}"
-    server.shutdown()
-    thread.join(timeout=0.1)
-    if thread.exc:
-        raise thread.exc
+    yield from _utils.make_server(proxpi_server.app)
 
 
 def test_pip_download(server, tmp_path):
@@ -129,7 +61,7 @@ def test_list(server):
     vary = {v.strip() for v in response.headers["Vary"].split(",")}
     assert "Accept-Encoding" in vary
 
-    parser = IndexParser.from_text(response.text)
+    parser = _utils.IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
     assert parser.title.strip()  # required for valid HTML5
     assert parser.anchors
@@ -151,7 +83,7 @@ def test_package(server, project):
         if a in response.request.headers["Accept-Encoding"]
     )
 
-    parser = IndexParser.from_text(response.text)
+    parser = _utils.IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
     assert parser.title == project
     assert parser.anchors
