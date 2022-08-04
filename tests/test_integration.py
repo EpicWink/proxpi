@@ -217,7 +217,7 @@ def test_list_json(server, accept):
     )
     assert "Accept" in response.headers["Vary"]
     assert response.json()["meta"] == {"api-version": "1.0"}
-    assert any(p == {"name": "simplejson"} for p in response.json()["projects"])
+    assert any(p == {"name": "proxpi"} for p in response.json()["projects"])
 
 
 @pytest.mark.parametrize("project", ["proxpi", "numpy", "scipy"])
@@ -294,7 +294,7 @@ def test_package_json(server, accept, query_format):
     else:
         headers = {"Accept": accept}
     response = requests.get(
-        f"{server}/index/simplejson/", params=params, headers=headers
+        f"{server}/index/proxpi/", params=params, headers=headers
     )
 
     assert response.status_code == 200
@@ -303,7 +303,7 @@ def test_package_json(server, accept, query_format):
     )
     assert "Accept" in response.headers["Vary"]
     assert response.json()["meta"] == {"api-version": "1.0"}
-    assert response.json()["name"] == "simplejson"
+    assert response.json()["name"] == "proxpi"
     assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
     assert all("hashes" in f for f in response.json()["files"])
 
@@ -311,7 +311,7 @@ def test_package_json(server, accept, query_format):
 def test_package_unknown_accept(server):
     """Test getting package files raises 406 with unknown accept-type."""
     response = requests.get(
-        f"{server}/index/simplejson/",
+        f"{server}/index/proxpi/",
         headers={"Accept": "application/vnd.pypi.simple.v42+xml"}
     )
     assert response.status_code == 406
