@@ -7,6 +7,7 @@ import logging
 import tarfile
 import warnings
 import posixpath
+import contextlib
 import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
@@ -15,18 +16,35 @@ import flask
 import jinja2
 import pytest
 import requests
+import proxpi._cache  # noqa
 import proxpi.server
 import packaging.specifiers
 
 from . import _utils
 
 proxpi_server = proxpi.server
+# noinspection PyProtectedMember
+File = proxpi._cache.FileFromHTML
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
+mock_index_response_is_json = False
 
-def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Flask:
+
+@contextlib.contextmanager
+def set_mock_index_response_is_json(value: bool):
+    global mock_index_response_is_json
+
+    original_mock_index_response_is_json = mock_index_response_is_json
+    mock_index_response_is_json = value
+    try:
+        yield
+    finally:
+        mock_index_response_is_json = original_mock_index_response_is_json
+
+
+def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
     """Construct a mock package index app.
 
     Warning: uses ``proxpi``'s templates for index responses, and files are
@@ -57,15 +75,36 @@ def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Fla
     app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
     app.jinja_loader = jinja2.PackageLoader("proxpi")
 
+    def build_json_v1_response(data: dict) -> flask.Response:
+        response = flask.jsonify(data)
+        response.mimetype = f"application/vnd.pypi.simple.v1+json"
+        return response
+
     @app.route("/")
-    def list_projects() -> str:
+    def list_projects() -> t.Union[str, flask.Response]:
+        if mock_index_response_is_json:
+            return build_json_v1_response({
+                "meta": {"api-version": "1.0"},
+                "projects": [{"name": n} for n in list(projects)],
+            })  # fmt: skip
         return flask.render_template("packages.html", package_names=list(projects))
 
     @app.route("/<name>/")
-    def get_project(name: str) -> str:
+    def get_project(name: str) -> t.Union[str, flask.Response]:
         files = projects.get(name)
         if not files:
             flask.abort(404)
+        if mock_index_response_is_json:
+            files_data = []
+            for file in files:
+                file_data = file.to_json_response()
+                file_data["url"] = file.name
+                files_data.append(file_data)
+            return build_json_v1_response({
+                "meta": {"api-version": "1.0"},
+                "name": name,
+                "files": files_data,
+            })  # fmt: skip
         return flask.render_template("files.html", package_name=name, files=files)
 
     @app.route("/<project_name>/<file_name>")
@@ -82,25 +121,25 @@ def make_mock_index_app(projects: t.Dict[str, t.List[proxpi.File]]) -> flask.Fla
 def mock_root_index():
     app = make_mock_index_app(projects={
         "proxpi": [
-            proxpi.File(
+            File(
                 name="proxpi-1.1.0-py3-none-any.whl",
                 url="spam eggs 42",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.1.0.tar.gz",
                 url="foo bar 42",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.0.0-py3-none-any.whl",
                 url="spam eggs 41",
                 fragment="",
                 attributes={},
             ),
-            proxpi.File(
+            File(
                 name="proxpi-1.0.0.tar.gz",
                 url="foo bar 42",
                 fragment="",
@@ -108,19 +147,19 @@ def mock_root_index():
             ),
         ],
         "numpy": [
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
                 url="",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.8"},
             ),
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
                 url="",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.8"},
             ),
-            proxpi.File(
+            File(
                 name="numpy-1.23.1.tar.gz",
                 url="foo bar 42",
                 fragment="sha256=",
@@ -135,13 +174,13 @@ def mock_root_index():
 def mock_extra_index():
     app = make_mock_index_app(projects={
         "scipy": [
-            proxpi.File(
+            File(
                 name="scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
                 url="spam eggs 17",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.7"},
             ),
-            proxpi.File(
+            File(
                 name="scipy-1.9.0.tar.gz",
                 url="foo bar 17",
                 fragment="sha256=",
@@ -149,7 +188,7 @@ def mock_extra_index():
             ),
         ],
         "numpy": [
-            proxpi.File(
+            File(
                 name="numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
                 url="spam eggs 40c",
                 fragment="sha256=",
@@ -180,9 +219,11 @@ def server(mock_root_index, mock_extra_index):
 
 
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
-def test_list(server, accept):
+@pytest.mark.parametrize("index_json_response", [False, True])
+def test_list(server, accept, index_json_response):
     """Test getting package list."""
-    response = requests.get(f"{server}/index/", headers={"Accept": accept})
+    with set_mock_index_response_is_json(index_json_response):
+        response = requests.get(f"{server}/index/", headers={"Accept": accept})
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
@@ -208,9 +249,11 @@ def test_list(server, accept):
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
-def test_list_json(server, accept):
+@pytest.mark.parametrize("index_json_response", [False, True])
+def test_list_json(server, accept, index_json_response):
     """Test getting package list with JSON API."""
-    response = requests.get(f"{server}/index/", headers={"Accept": accept})
+    with set_mock_index_response_is_json(index_json_response):
+        response = requests.get(f"{server}/index/", headers={"Accept": accept})
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (
         "application/vnd.pypi.simple.v1+json"
@@ -226,10 +269,12 @@ def test_list_json(server, accept):
 @pytest.mark.parametrize("accept", [
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
-def test_package(server, project, accept):
+@pytest.mark.parametrize("index_json_response", [False, True])
+def test_package(server, project, accept, index_json_response):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
-    response = requests.get(project_url, headers={"Accept": accept})
+    with set_mock_index_response_is_json(index_json_response):
+        response = requests.get(project_url, headers={"Accept": accept})
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
@@ -289,7 +334,8 @@ def test_package(server, project, accept):
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("query_format", [False, True])
-def test_package_json(server, accept, query_format):
+@pytest.mark.parametrize("index_json_response", [False, True])
+def test_package_json(server, accept, query_format, index_json_response):
     """Test getting package files with JSON API."""
     params = None
     headers = None
@@ -297,9 +343,10 @@ def test_package_json(server, accept, query_format):
         params = {"format": accept}
     else:
         headers = {"Accept": accept}
-    response = requests.get(
-        f"{server}/index/proxpi/", params=params, headers=headers
-    )
+    with set_mock_index_response_is_json(index_json_response):
+        response = requests.get(
+            f"{server}/index/proxpi/", params=params, headers=headers
+        )
 
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (

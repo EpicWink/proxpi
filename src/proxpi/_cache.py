@@ -3,6 +3,7 @@
 import io
 import os
 import re
+import abc
 import time
 import shutil
 import logging
@@ -17,6 +18,9 @@ import urllib.parse
 
 import requests
 import lxml.etree
+
+if t.TYPE_CHECKING:
+    import xml.etree.ElementTree
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
@@ -42,23 +46,169 @@ def _now() -> float:
     return time.monotonic() + _time_offset
 
 
-@dataclasses.dataclass
-class File:
+class File(metaclass=abc.ABCMeta):
     """Package file reference."""
 
+    @property
+    @abc.abstractmethod
+    def name(self) -> str:
+        """Filename."""
+
+    @property
+    @abc.abstractmethod
+    def url(self) -> str:
+        """File URL."""
+
+    @property
+    @abc.abstractmethod
+    def fragment(self) -> str:
+        """File URL fragment."""
+
+    @property
+    @abc.abstractmethod
+    def attributes(self) -> t.Dict[str, str]:
+        """File reference link element (non-href) attributes."""
+
+    @property
+    @abc.abstractmethod
+    def hashes(self) -> t.Dict[str, str]:
+        """File hashes."""
+
+    @property
+    @abc.abstractmethod
+    def requires_python(self) -> t.Union[str, None]:
+        """Distribution Python requirement."""
+
+    @property
+    @abc.abstractmethod
+    def dist_info_metadata(self) -> t.Union[str, None]:
+        """Distribution metadata file marker."""
+
+    @property
+    @abc.abstractmethod
+    def gpg_sig(self) -> t.Union[str, None]:
+        """Distribution GPG signature file marker."""
+
+    @property
+    @abc.abstractmethod
+    def yanked(self) -> t.Union[str, None]:
+        """File yanked status."""
+
+    def to_json_response(self) -> t.Dict[str, t.Any]:
+        """Serialise to JSON response data (with 'url' key)."""
+        data = {"filename": self.name, "hashes": self.hashes}
+        if self.requires_python is not None:
+            data["requires-python"] = self.requires_python
+        if self.dist_info_metadata is not None:
+            data["dist-info-metadata"] = self.dist_info_metadata
+        if self.gpg_sig is not None:
+            data["gpg-sig"] = self.gpg_sig
+        if self.yanked is not None:
+            data["yanked"] = self.yanked
+        return data
+
+
+@dataclasses.dataclass
+class FileFromHTML(File):
     __slots__ = ("name", "url", "fragment", "attributes")
 
     name: str
-    """Filename."""
-
     url: str
-    """File URL."""
-
     fragment: str
-    """File URL fragment."""
-
     attributes: t.Dict[str, str]
-    """File reference link element (non-href) attributes."""
+
+    @classmethod
+    def from_html_element(
+        cls, el: "xml.etree.ElementTree.Element", request_url: str
+    ) -> "File":
+        """Construct from HTML API response."""
+        url = urllib.parse.urljoin(request_url, el.attrib["href"])
+        return cls(
+            name=el.text,
+            url=url,
+            fragment=urllib.parse.urlsplit(url).fragment,
+            attributes={k: v for k, v in el.attrib.items() if k != "href"},
+        )
+
+    @property
+    def hashes(self):
+        hashes = {}
+        for part in self.fragment.split(","):
+            try:
+                hash_name, hash_value = part.split("=")
+            except ValueError:
+                continue
+            hashes[hash_name] = hash_value
+        return hashes
+
+    @property
+    def requires_python(self):
+        return self.attributes.get(f"data-requires-python")
+
+    @property
+    def dist_info_metadata(self):
+        return self.attributes.get(f"data-dist-info-metadata")
+
+    @property
+    def gpg_sig(self):
+        return self.attributes.get(f"data-gpg-sig")
+
+    @property
+    def yanked(self):
+        return self.attributes.get(f"data-yanked")
+
+
+@dataclasses.dataclass
+class FileFromJSON(File):
+    __slots__ = (
+        "name",
+        "url",
+        "hashes",
+        "requires_python",
+        "dist_info_metadata",
+        "gpg_sig",
+        "yanked",
+    )
+
+    name: str
+    url: str
+    hashes: t.Dict[str, str]
+    requires_python: t.Union[str, None]
+    dist_info_metadata: t.Union[str, None]
+    gpg_sig: t.Union[str, None]
+    yanked: t.Union[str, None]
+
+    @classmethod
+    def from_json_response(cls, data: t.Dict[str, t.Any], request_url: str) -> "File":
+        """Construct from JSON API response."""
+        return cls(
+            name=data["filename"],
+            url=urllib.parse.urljoin(request_url, data["url"]),
+            hashes=data["hashes"],
+            requires_python=data.get("requires-python"),
+            dist_info_metadata=data.get("dist-info-metadata"),
+            gpg_sig=data.get("gpg-sig"),
+            yanked=data.get("yanked"),
+        )
+
+    @property
+    def fragment(self) -> str:
+        """File URL fragment."""
+        return ",".join(f"{n}={v}" for n, v in self.hashes.items())
+
+    @property
+    def attributes(self) -> t.Dict[str, str]:
+        """File reference link element (non-href) attributes."""
+        attributes = {}
+        if self.requires_python is not None:
+            attributes["data-requires-python"] = self.requires_python
+        if self.dist_info_metadata is not None:
+            attributes["data-dist-info-metadata"] = self.dist_info_metadata
+        if self.gpg_sig is not None:
+            attributes["data-gpg-sig"] = self.gpg_sig
+        if self.yanked is not None:
+            attributes["data-yanked"] = self.yanked
+        return attributes
 
 
 @dataclasses.dataclass
@@ -154,6 +304,10 @@ class _IndexCache:
     _package_locks: _Locks
     _index: t.Dict[str, str]
     _packages: t.Dict[str, Package]
+    _headers = {"Accept": (
+        "application/vnd.pypi.simple.v1+json, "
+        "application/vnd.pypi.simple.v1+html;q=0.1"
+    )}  # fmt: skip
 
     def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
         self.index_url = index_url
@@ -175,13 +329,21 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(
-            self.index_url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
-        )
+        response = self.session.get(self.index_url, headers=self._headers)
         response.raise_for_status()
-        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         self._index_t = _now()
 
+        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+            response_data = response.json()
+            for project in response_data["projects"]:
+                name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
+                self._index[name_normalised] = f"{name_normalised}/"
+            logger.debug(
+                f"Finished listing packages in index '{self._index_url_masked}'",
+            )
+            return
+
+        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         root = tree.getroot()
         body = next((b for b in root if b.tag == "body"), root)
         for child in body:
@@ -227,32 +389,36 @@ class _IndexCache:
         response = None
         if self._index_t is None or _now() > self._index_t + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
-            response = self.session.get(
-                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
-            )
-
+            logger.debug(f"Refreshing '{package_name}'")
+            response = self.session.get(url, headers=self._headers)
         if not response or not response.ok:
-            if package_name not in self.list_projects():
+            logger.debug(f"List-files response: {response}")
+            package_name_normalised = _name_normalise_re.sub("-", package_name).lower()
+            if package_name_normalised not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(
-                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}
-            )
+            response = self.session.get(url, headers=self._headers)
             response.raise_for_status()
 
         package = Package(package_name, files={}, refreshed=_now())
-        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
 
+        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+            response_data = response.json()
+            for file_data in response_data["files"]:
+                file = FileFromJSON.from_json_response(file_data, response.request.url)
+                package.files[file.name] = file
+            self._packages[package_name] = package
+            logger.debug(f"Finished listing files in package '{package_name}'")
+            return
+
+        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
         root = tree.getroot()
         body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
-                name = child.text
-                url = urllib.parse.urljoin(response.request.url, child.attrib["href"])
-                attributes = {k: v for k, v in child.attrib.items() if k != "href"}
-                fragment = urllib.parse.urlsplit(url).fragment
-                package.files[name] = File(name, url, fragment, attributes)
+                file = FileFromHTML.from_html_element(child, response.request.url)
+                package.files[file.name] = file
         self._packages[package_name] = package
         logger.debug(f"Finished listing files in package '{package_name}'")
 
