@@ -178,7 +178,7 @@ class _IndexCache:
         self._index_t = time.monotonic()
 
         root = tree.getroot()
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
                 name = _name_normalise_re.sub("-", child.text).lower()
@@ -240,7 +240,7 @@ class _IndexCache:
         tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
 
         root = tree.getroot()
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
                 name = child.text
@@ -626,7 +626,7 @@ class Cache:
             for file in extra_files:
                 if file.name not in {f.name for f in files}:
                     files.append(file)
-        if exc:
+        if not files and exc:
             raise exc
         return files
 

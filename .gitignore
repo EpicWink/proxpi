@@ -4,4 +4,6 @@ __pycache__/
 .idea/
 *.egg-info/
 htmlcov/
+dist/
+TODO.md
 .coverage
