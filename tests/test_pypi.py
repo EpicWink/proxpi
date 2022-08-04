@@ -4,7 +4,6 @@ import logging
 import subprocess
 
 import pytest
-import requests
 
 import proxpi.server
 
@@ -16,9 +15,7 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 @pytest.fixture(scope="module")
 def server():
-    for server_url in _utils.make_server(proxpi.server.app):
-        requests.delete(f"{server_url}/cache/list")
-        yield server_url
+    yield from _utils.make_server(proxpi.server.app)
 
 
 def test_pip_download(server, tmp_path):
