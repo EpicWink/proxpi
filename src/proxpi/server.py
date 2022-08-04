@@ -161,7 +161,7 @@ def list_packages():
         response = flask.make_response(
             flask.render_template("packages.html", package_names=package_names),
         )
-    response.vary = (", " if response.vary else "") + "Accept"
+    response.vary.add("Accept")
     return _compress(response)
 
 
@@ -199,7 +199,7 @@ def list_files(package_name: str):
             flask.render_template("files.html", package_name=package_name, files=files),
         )
 
-    response.vary = (", " if response.vary else "") + "Accept"
+    response.vary.add("Accept")
     return _compress(response)
 
 
