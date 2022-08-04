@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
 _html_parser = lxml.etree.HTMLParser()
+_time_offset = time.time()
+
+
+def _now() -> float:
+    return time.monotonic() + _time_offset
 
 
 class File(metaclass=abc.ABCMeta):
@@ -320,13 +325,13 @@ class _IndexCache:
 
     def _list_packages(self):
         """List projects using or updating cache."""
-        if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
+        if self._index_t is not None and _now() < self._index_t + self.ttl:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = self.session.get(self.index_url, headers=self._headers)
         response.raise_for_status()
-        self._index_t = time.monotonic()
+        self._index_t = _now()
 
         if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
@@ -377,12 +382,12 @@ class _IndexCache:
     def _list_files(self, package_name: str):
         """List project files using or updating cache."""
         package = self._packages.get(package_name)
-        if package and time.monotonic() < package.refreshed + self.ttl:
+        if package and _now() < package.refreshed + self.ttl:
             return
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
-        if time.monotonic() > (self._index_t or 0.0) + self.ttl:
+        if self._index_t is None or _now() > self._index_t + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
             logger.debug(f"Refreshing '{package_name}'")
             response = self.session.get(url, headers=self._headers)
@@ -396,7 +401,7 @@ class _IndexCache:
             response = self.session.get(url, headers=self._headers)
             response.raise_for_status()
 
-        package = Package(package_name, files={}, refreshed=time.monotonic())
+        package = Package(package_name, files={}, refreshed=_now())
 
         if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
