@@ -189,7 +189,6 @@ def test_list(server, accept):
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
-    assert "Accept" in response.headers["Vary"]
     assert any(
         response.headers["Content-Encoding"] == a
         for a in ["gzip", "deflate"]
@@ -197,6 +196,7 @@ def test_list(server, accept):
     )
     vary = {v.strip() for v in response.headers["Vary"].split(",")}
     assert "Accept-Encoding" in vary
+    assert "Accept" in vary
 
     parser = _utils.IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
@@ -218,7 +218,9 @@ def test_list_json(server, accept):
     assert response.headers["Content-Type"][:35] == (
         "application/vnd.pypi.simple.v1+json"
     )
-    assert "Accept" in response.headers["Vary"]
+    vary = {v.strip() for v in response.headers["Vary"].split(",")}
+    assert "Accept-Encoding" in vary
+    assert "Accept" in vary
     assert response.json()["meta"] == {"api-version": "1.0"}
     assert any(p == {"name": "proxpi"} for p in response.json()["projects"])
 
@@ -234,12 +236,14 @@ def test_package(server, project, accept):
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
-    assert "Accept" in response.headers["Vary"]
     assert any(
         response.headers["Content-Encoding"] == a
         for a in ["gzip", "deflate"]
         if a in response.request.headers["Accept-Encoding"]
     )
+    vary = {v.strip() for v in response.headers["Vary"].split(",")}
+    assert "Accept-Encoding" in vary
+    assert "Accept" in vary
 
     parser = _utils.IndexParser.from_text(response.text)
     assert parser.declaration == "DOCTYPE html"
@@ -304,7 +308,10 @@ def test_package_json(server, accept, query_format):
     assert response.headers["Content-Type"][:35] == (
         "application/vnd.pypi.simple.v1+json"
     )
-    assert "Accept" in response.headers["Vary"]
+    vary = {v.strip() for v in response.headers["Vary"].split(",")}
+    assert "Accept-Encoding" in vary
+    assert "Accept" in vary
+
     assert response.json()["meta"] == {"api-version": "1.0"}
     assert response.json()["name"] == "proxpi"
     assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
