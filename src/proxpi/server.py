@@ -153,12 +153,10 @@ def list_packages():
     """List all projects in index(es)."""
     package_names = cache.list_projects()
     if _wants_json():
-        response = _build_json_response(
-            data={
-                "meta": {"api-version": "1.0"},
-                "projects": [{"name": n} for n in package_names],
-            },
-        )
+        response = _build_json_response(data={
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": n} for n in package_names],
+        })  # fmt: skip
     else:
         response = flask.make_response(
             flask.render_template("packages.html", package_names=package_names),
@@ -190,13 +188,11 @@ def list_files(package_name: str):
                 if f"data-{data_set_key}" in file.attributes:
                     file_data[data_set_key] = file.attributes[f"data-{data_set_key}"]
             files_data.append(file_data)
-        response = _build_json_response(
-            data={
-                "meta": {"api-version": "1.0"},
-                "name": package_name,
-                "files": files_data,
-            },
-        )
+        response = _build_json_response(data={
+            "meta": {"api-version": "1.0"},
+            "name": package_name,
+            "files": files_data,
+        })  # fmt: skip
 
     else:
         response = flask.make_response(
