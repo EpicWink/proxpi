@@ -179,11 +179,14 @@ def server(mock_root_index, mock_extra_index):
         yield from _utils.make_server(proxpi_server.app)
 
 
-def test_list(server):
+@pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
+def test_list(server, accept):
     """Test getting package list."""
-    response = requests.get(f"{server}/index/")
+    response = requests.get(f"{server}/index/", headers={"Accept": accept})
     response.raise_for_status()
 
+    assert response.headers["Content-Type"][:9] == "text/html"
+    assert "Accept" in response.headers["Vary"]
     assert any(
         response.headers["Content-Encoding"] == a
         for a in ["gzip", "deflate"]
@@ -201,13 +204,34 @@ def test_list(server):
         assert href == f"{text}/"
 
 
+@pytest.mark.parametrize("accept", [
+    "application/vnd.pypi.simple.v1+json",
+    "application/vnd.pypi.simple.latest+json",
+])
+def test_list_json(server, accept):
+    """Test getting package list with JSON API."""
+    response = requests.get(f"{server}/index/", headers={"Accept": accept})
+    assert response.status_code == 200
+    assert response.headers["Content-Type"][:35] == (
+        "application/vnd.pypi.simple.v1+json"
+    )
+    assert "Accept" in response.headers["Vary"]
+    assert response.json()["meta"] == {"api-version": "1.0"}
+    assert any(p == {"name": "proxpi"} for p in response.json()["projects"])
+
+
 @pytest.mark.parametrize("project", ["proxpi", "numpy", "scipy"])
-def test_package(server, project):
+@pytest.mark.parametrize("accept", [
+    "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
+])
+def test_package(server, project, accept):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
-    response = requests.get(project_url)
+    response = requests.get(project_url, headers={"Accept": accept})
     response.raise_for_status()
 
+    assert response.headers["Content-Type"][:9] == "text/html"
+    assert "Accept" in response.headers["Vary"]
     assert any(
         response.headers["Content-Encoding"] == a
         for a in ["gzip", "deflate"]
@@ -254,6 +278,43 @@ def test_package(server, project):
             )
             specifier = packaging.specifiers.SpecifierSet(python_requirement)
             assert specifier.filter(["1.2", "2.7", "3.3", "3.7", "3.10", "3.12"])
+
+
+@pytest.mark.parametrize("accept", [
+    "application/vnd.pypi.simple.v1+json",
+    "application/vnd.pypi.simple.latest+json",
+])
+@pytest.mark.parametrize("query_format", [False, True])
+def test_package_json(server, accept, query_format):
+    """Test getting package files with JSON API."""
+    params = None
+    headers = None
+    if query_format:
+        params = {"format": accept}
+    else:
+        headers = {"Accept": accept}
+    response = requests.get(
+        f"{server}/index/proxpi/", params=params, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"][:35] == (
+        "application/vnd.pypi.simple.v1+json"
+    )
+    assert "Accept" in response.headers["Vary"]
+    assert response.json()["meta"] == {"api-version": "1.0"}
+    assert response.json()["name"] == "proxpi"
+    assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
+    assert all("hashes" in f for f in response.json()["files"])
+
+
+def test_package_unknown_accept(server):
+    """Test getting package files raises 406 with unknown accept-type."""
+    response = requests.get(
+        f"{server}/index/proxpi/",
+        headers={"Accept": "application/vnd.pypi.simple.v42+xml"}
+    )
+    assert response.status_code == 406
 
 
 def test_invalidate_list(server):
