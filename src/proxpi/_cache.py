@@ -340,7 +340,7 @@ class _IndexCache:
 
         tree = lxml.etree.parse(response.raw, _html_parser)
         root = tree.getroot()
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
                 name = _name_normalise_re.sub("-", child.text).lower()
@@ -406,7 +406,7 @@ class _IndexCache:
 
         tree = lxml.etree.parse(response.raw, _html_parser)
         root = tree.getroot()
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
                 file = FileFromHTML.from_html_element(child, response.request.url)
@@ -715,6 +715,10 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        proxpi_version = get_proxpi_version()
+        if proxpi_version:
+            session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
+
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
@@ -723,7 +727,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl)
+            cls._index_cache_cls(url, ttl, session)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
@@ -785,7 +789,7 @@ class Cache:
             for file in extra_files:
                 if file.name not in {f.name for f in files}:
                     files.append(file)
-        if exc:
+        if not files and exc:
             raise exc
         return files
 
@@ -852,3 +856,16 @@ class Cache:
         self.root_cache.invalidate_project(name)
         for cache in self.extra_caches:
             cache.invalidate_project(name)
+
+
+@functools.lru_cache(maxsize=None)
+def get_proxpi_version() -> t.Union[str, None]:
+    try:
+        import importlib.metadata
+    except ImportError:
+        return None
+    else:
+        try:
+            return importlib.metadata.version("proxpi")
+        except importlib.metadata.PackageNotFoundError:
+            return None

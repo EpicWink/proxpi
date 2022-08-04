@@ -30,15 +30,8 @@ else:  # pragma: no cover
     )
 logger = logging.getLogger(__name__)
 
-try:
-    import importlib.metadata
-except ImportError:
-    importlib = None
-else:
-    try:
-        logger.info(f"proxpi version: {importlib.metadata.version('proxpi')}")
-    except importlib.metadata.PackageNotFoundError:
-        pass
+_proxpi_version = _cache.get_proxpi_version()
+logger.info(f"proxpi version: {_proxpi_version or '<unknown>'}")
 
 try:
     import gunicorn.glogging
@@ -66,6 +59,7 @@ if app.debug or app.testing:
             handler.level = logging.DEBUG
 logger.info("Cache: %r", cache)
 KNOWN_LATEST_JSON_VERSION = "v1"
+KNOWN_DATASET_KEYS = ["requires-python", "dist-info-metadata", "gpg-sig", "yanked"]
 
 
 def _wants_json(version: str = "v1") -> bool:
@@ -141,7 +135,7 @@ def _compress(response: t.Union[str, flask.Response]) -> flask.Response:
         response.content_encoding = "deflate"
     elif "identity" in flask.request.accept_encodings and not identity_quality:
         flask.abort(406)
-    response.vary = (", " if response.vary else "") + "Accept-Encoding"
+    response.vary.add("Accept-Encoding")
     return response
 
 
@@ -159,12 +153,10 @@ def list_packages():
     """List all projects in index(es)."""
     package_names = cache.list_projects()
     if _wants_json():
-        response = _build_json_response(
-            data={
-                "meta": {"api-version": "1.0"},
-                "projects": [{"name": n} for n in package_names],
-            },
-        )
+        response = _build_json_response(data={
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": n} for n in package_names],
+        })  # fmt: skip
     else:
         response = flask.make_response(
             flask.render_template("packages.html", package_names=package_names),
@@ -188,13 +180,11 @@ def list_files(package_name: str):
             file_data = file.to_json_response()
             file_data["url"] = file.name
             files_data.append(file_data)
-        response = _build_json_response(
-            data={
-                "meta": {"api-version": "1.0"},
-                "name": package_name,
-                "files": files_data,
-            },
-        )
+        response = _build_json_response(data={
+            "meta": {"api-version": "1.0"},
+            "name": package_name,
+            "files": files_data,
+        })  # fmt: skip
 
     else:
         response = flask.make_response(
