@@ -384,8 +384,10 @@ class _IndexCache:
         response = None
         if time.monotonic() > (self._index_t or 0.0) + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
+            logger.debug(f"Refreshing '{package_name}'")
             response = self.session.get(url, headers=self._headers)
         if not response or not response.ok:
+            logger.debug(f"List-files response: {response}")
             if package_name not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
