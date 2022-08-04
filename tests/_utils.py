@@ -69,7 +69,7 @@ class Thread(threading.Thread):
 
 def make_server(app: "flask.Flask") -> t.Generator[str, None, None]:
     server = werkzeug.serving.make_server(host="localhost", port=0, app=app)
-    thread = Thread(target=server.serve_forever)
+    thread = Thread(target=server.serve_forever, args=(0.05,))
     thread.start()
     yield f"http://localhost:{server.port}"
     server.shutdown()
