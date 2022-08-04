@@ -174,11 +174,11 @@ class FileFromJSON(File):
     yanked: t.Union[str, None]
 
     @classmethod
-    def from_json_response(cls, data: t.Dict[str, t.Any]) -> "File":
+    def from_json_response(cls, data: t.Dict[str, t.Any], request_url: str) -> "File":
         """Construct from JSON API response."""
         return cls(
             name=data["filename"],
-            url=data["url"],
+            url=urllib.parse.urljoin(request_url, data["url"]),
             hashes=data["hashes"],
             requires_python=data.get("requires-python"),
             dist_info_metadata=data.get("dist-info-metadata"),
@@ -398,7 +398,7 @@ class _IndexCache:
         if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
             for file_data in response_data["files"]:
-                file = FileFromJSON.from_json_response(file_data)
+                file = FileFromJSON.from_json_response(file_data, response.request.url)
                 package.files[file.name] = file
             self._packages[package_name] = package
             logger.debug(f"Finished listing files in package '{package_name}'")
