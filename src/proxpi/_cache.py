@@ -81,17 +81,17 @@ class File(metaclass=abc.ABCMeta):
 
     @property
     @abc.abstractmethod
-    def dist_info_metadata(self) -> t.Union[str, None]:
+    def dist_info_metadata(self) -> t.Union[bool, t.Dict[str, str], None]:
         """Distribution metadata file marker."""
 
     @property
     @abc.abstractmethod
-    def gpg_sig(self) -> t.Union[str, None]:
+    def gpg_sig(self) -> t.Union[bool, None]:
         """Distribution GPG signature file marker."""
 
     @property
     @abc.abstractmethod
-    def yanked(self) -> t.Union[str, None]:
+    def yanked(self) -> t.Union[bool, str, None]:
         """File yanked status."""
 
     def to_json_response(self) -> t.Dict[str, t.Any]:
@@ -132,30 +132,40 @@ class FileFromHTML(File):
 
     @property
     def hashes(self):
-        hashes = {}
-        for part in self.fragment.split(","):
-            try:
-                hash_name, hash_value = part.split("=")
-            except ValueError:
-                continue
-            hashes[hash_name] = hash_value
-        return hashes
+        return self._parse_hash(self.fragment)
 
     @property
     def requires_python(self):
-        return self.attributes.get(f"data-requires-python")
+        return self.attributes.get("data-requires-python") or None
 
     @property
     def dist_info_metadata(self):
-        return self.attributes.get(f"data-dist-info-metadata")
+        metadata = self.attributes.get("data-dist-info-metadata")
+        if metadata is None:
+            return None
+        hashes = self._parse_hash(metadata)
+        if not hashes:
+            return True  # '': value-less -> true
+        return hashes
 
     @property
     def gpg_sig(self):
-        return self.attributes.get(f"data-gpg-sig")
+        has_gpg_sig = self.attributes.get("data-gpg-sig")
+        return has_gpg_sig and self.attributes.get("data-gpg-sig") == "true"
 
     @property
     def yanked(self):
-        return self.attributes.get(f"data-yanked")
+        return self.attributes.get("data-yanked") is not None  # '': value-less -> true
+
+    @staticmethod
+    def _parse_hash(hash_string: str) -> t.Dict[str, str]:
+        try:
+            hash_name, hash_value = hash_string.split("=")
+        except ValueError:
+            if hash_string.count("=") > 0:
+                raise
+            return {}
+        return {hash_name: hash_value}
 
 
 @dataclasses.dataclass
@@ -174,9 +184,9 @@ class FileFromJSON(File):
     url: str
     hashes: t.Dict[str, str]
     requires_python: t.Union[str, None]
-    dist_info_metadata: t.Union[str, None]
-    gpg_sig: t.Union[str, None]
-    yanked: t.Union[str, None]
+    dist_info_metadata: t.Union[bool, t.Dict[str, str], None]
+    gpg_sig: t.Union[bool, None]
+    yanked: t.Union[bool, str, None]
 
     @classmethod
     def from_json_response(cls, data: t.Dict[str, t.Any], request_url: str) -> "File":
@@ -194,21 +204,34 @@ class FileFromJSON(File):
     @property
     def fragment(self) -> str:
         """File URL fragment."""
-        return ",".join(f"{n}={v}" for n, v in self.hashes.items())
+        return self._stringify_hashes(self.hashes)
 
     @property
     def attributes(self) -> t.Dict[str, str]:
         """File reference link element (non-href) attributes."""
         attributes = {}
-        if self.requires_python is not None:
+        if self.requires_python:
             attributes["data-requires-python"] = self.requires_python
-        if self.dist_info_metadata is not None:
-            attributes["data-dist-info-metadata"] = self.dist_info_metadata
+        if self.dist_info_metadata:
+            attributes["data-dist-info-metadata"] = self._stringify_hashes(
+                self.dist_info_metadata,
+            ) if isinstance(self.dist_info_metadata, dict) else ""  # fmt: skip
         if self.gpg_sig is not None:
-            attributes["data-gpg-sig"] = self.gpg_sig
-        if self.yanked is not None:
-            attributes["data-yanked"] = self.yanked
+            attributes["data-gpg-sig"] = "true" if self.gpg_sig else "false"
+        if self.yanked:
+            attributes["data-yanked"] = (
+                self.yanked if isinstance(self.yanked, str) else ""
+            )
         return attributes
+
+    @staticmethod
+    def _stringify_hashes(hashes: t.Dict[str, str]) -> str:
+        if not hashes:
+            return ""
+        if "sha256" in hashes:
+            return f"sha256={hashes['sha256']}"
+        for hash_name, hash_value in hashes.items():
+            return f"{hash_name}={hash_value}"
 
 
 @dataclasses.dataclass

@@ -33,7 +33,7 @@ mock_index_response_is_json = False
 
 
 @contextlib.contextmanager
-def set_mock_index_response_is_json(value: bool):
+def set_mock_index_response_is_json(value: t.Union[bool, str]):
     global mock_index_response_is_json
 
     original_mock_index_response_is_json = mock_index_response_is_json
@@ -99,6 +99,11 @@ def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
             for file in files:
                 file_data = file.to_json_response()
                 file_data["url"] = file.name
+                if (
+                    mock_index_response_is_json == "yanked"
+                    and not file_data.get("yanked")
+                ):
+                    file_data["yanked"] = False
                 files_data.append(file_data)
             return build_json_v1_response({
                 "meta": {"api-version": "1.0"},
@@ -143,7 +148,7 @@ def mock_root_index():
                 name="proxpi-1.0.0.tar.gz",
                 url="foo bar 42",
                 fragment="",
-                attributes={},
+                attributes={"data-requires-python": ""},
             ),
         ],
         "numpy": [
@@ -157,7 +162,7 @@ def mock_root_index():
                 name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
                 url="",
                 fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
+                attributes={"data-requires-python": ">=3.8", "data-yanked": ""},
             ),
             File(
                 name="numpy-1.23.1.tar.gz",
@@ -269,7 +274,7 @@ def test_list_json(server, accept, index_json_response):
 @pytest.mark.parametrize("accept", [
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
-@pytest.mark.parametrize("index_json_response", [False, True])
+@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
 def test_package(server, project, accept, index_json_response):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
@@ -328,14 +333,28 @@ def test_package(server, project, accept, index_json_response):
             specifier = packaging.specifiers.SpecifierSet(python_requirement)
             assert specifier.filter(["1.2", "2.7", "3.3", "3.7", "3.10", "3.12"])
 
+    attributes_by_filename = dict(parser.anchors)
+    if project == "proxpi":
+        attributes = attributes_by_filename["proxpi-1.0.0.tar.gz"]
+        assert not any(v for k, v in attributes if k == "data-requires-python")
 
+    elif project == "numpy":
+        assert any(k == "data-yanked" for k, _ in attributes_by_filename.pop(
+            "numpy-1.23.1-cp310-cp310-win_amd64.whl",
+        ))  # fmt: skip
+
+        for filename, attributes in attributes_by_filename.items():
+            assert not any(k == "data-yanked" for k, _ in attributes), attributes
+
+
+@pytest.mark.parametrize("project", ["proxpi", "numpy", "scipy"])
 @pytest.mark.parametrize("accept", [
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("query_format", [False, True])
-@pytest.mark.parametrize("index_json_response", [False, True])
-def test_package_json(server, accept, query_format, index_json_response):
+@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
+def test_package_json(server, project, accept, query_format, index_json_response):
     """Test getting package files with JSON API."""
     params = None
     headers = None
@@ -345,7 +364,7 @@ def test_package_json(server, accept, query_format, index_json_response):
         headers = {"Accept": accept}
     with set_mock_index_response_is_json(index_json_response):
         response = requests.get(
-            f"{server}/index/proxpi/", params=params, headers=headers
+            f"{server}/index/{project}/", params=params, headers=headers
         )
 
     assert response.status_code == 200
@@ -356,10 +375,23 @@ def test_package_json(server, accept, query_format, index_json_response):
     assert "Accept-Encoding" in vary
     assert "Accept" in vary
 
-    assert response.json()["meta"] == {"api-version": "1.0"}
-    assert response.json()["name"] == "proxpi"
-    assert all(f["url"] and f["filename"] == f["url"] for f in response.json()["files"])
-    assert all("hashes" in f for f in response.json()["files"])
+    response_data = response.json()
+    assert response_data["meta"] == {"api-version": "1.0"}
+    assert response_data["name"] == project
+
+    for file in response_data["files"]:
+        assert file["url"]
+        assert file["filename"] == file["url"]
+        assert isinstance(file["hashes"], dict)
+
+    files_by_filename = {f["filename"]: f for f in response_data["files"]}
+    if project == "proxpi":
+        assert not files_by_filename["proxpi-1.0.0.tar.gz"].get("requires-python")
+
+    elif project == "numpy":
+        yanked_file = files_by_filename.pop("numpy-1.23.1-cp310-cp310-win_amd64.whl")
+        assert yanked_file.get("yanked")
+        assert not any(f.get("yanked") for f in files_by_filename.values())
 
 
 def test_package_unknown_accept(server):
