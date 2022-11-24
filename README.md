@@ -31,13 +31,14 @@ Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 docker run -p 5000:5000 epicwink/proxpi
 ```
 
-or save the [docker compose file](./docker-compose.yml) then run
+Without arguments, runs with 2 threads. If passing arguments, make sure to bind to an
+exported address (or all with `0.0.0.0`) on port 5000 (ie `--bind 0.0.0.0:5000`).
+
+##### Compose
+Alternatively, use [Docker Compose](https://docs.docker.com/compose/)
 ```bash
 docker compose up
 ```
-
-Without arguments, runs with 2 threads. If passing arguments, make sure to bind to an
-exported address (or all with `0.0.0.0`) on port 5000 (ie `--bind 0.0.0.0:5000`).
 
 #### Local
 ```bash
