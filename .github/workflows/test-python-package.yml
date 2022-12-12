@@ -34,7 +34,11 @@ jobs:
     - name: Test with pytest
       run: |
         pip install -r tests/requirements.txt
-        pytest -vvra --cov proxpi --cov-report xml --cov-report term
+        pytest -vvra \
+          --cov proxpi \
+          --cov-report xml \
+          --cov-report term \
+          --cov-config setup.cfg
     - name: Upload coverage
       uses: codecov/codecov-action@v1
       with:
