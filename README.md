@@ -15,14 +15,6 @@ PyPI caching mirror
 * Set files cache max-size on disk
 * Manually invalidate index cache
 
-## Installation
-If not using Docker
-```bash
-pip install proxpi
-```
-
-Install `coloredlogs` as well to get coloured logging
-
 ## Usage
 ### Start server
 #### Docker
@@ -41,6 +33,14 @@ docker compose up
 ```
 
 #### Local
+##### Install
+```bash
+pip install proxpi
+```
+
+Install `coloredlogs` as well to get coloured logging
+
+##### Run server
 ```bash
 FLASK_APP=proxpi.server flask run
 ```
