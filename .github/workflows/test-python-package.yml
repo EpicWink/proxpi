@@ -40,6 +40,6 @@ jobs:
           --cov-report term \
           --cov-config setup.cfg
     - name: Upload coverage
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
