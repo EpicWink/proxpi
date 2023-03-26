@@ -34,6 +34,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
+GIVEUP_TIME = int(os.environ.get("PROXPI_GIVEUP_TIME", 0.9))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -654,11 +655,11 @@ class _FileCache:
         logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
-        """Wait 0.9s for existing download."""
+        """Wait PROXPI_GIVEUP_TIME seconds for existing download."""
         file = self._files.get(url)
         if isinstance(file, Thread):
             try:
-                file.join(0.9)
+                file.join(GIVEUP_TIME)
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
