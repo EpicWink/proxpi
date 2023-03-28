@@ -662,7 +662,13 @@ class _FileCache:
         logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
-        """Wait ``self.download_timeout`` seconds for existing download."""
+        """Wait for existing download, if any.
+
+        Returns:
+            whether the wait is given up (ie if time-out was reached or
+                exception was encountered)
+        """
+
         file = self._files.get(url)
         if isinstance(file, Thread):
             try:
