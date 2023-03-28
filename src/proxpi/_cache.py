@@ -34,7 +34,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
-GIVEUP_TIME = int(os.environ.get("PROXPI_GIVEUP_TIME", 0.9))
+GIVEUP_TIME = float(os.environ.get("PROXPI_GIVEUP_TIME", 0.9))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
