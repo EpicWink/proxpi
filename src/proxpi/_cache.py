@@ -34,7 +34,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
-GIVEUP_TIME = float(os.environ.get("PROXPI_GIVEUP_TIME", 0.9))
+DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -766,7 +766,7 @@ class Cache:
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(
-            CACHE_SIZE, CACHE_DIR, GIVEUP_TIME, session
+            CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
         )
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
