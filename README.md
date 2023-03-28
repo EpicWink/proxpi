@@ -81,7 +81,9 @@ change in a package index.
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
   `"application/octet-stream"` instead of letting Flask guess it. This may be needed
   if your package installer (eg Poetry) mishandles responses with declared encoding.
-* `PROXPI_GIVEUP_TIME`: it's the time that Proxpi should wait for a package to be downloaded from pypi before redirecting user to pypi.org.
+* `PROXPI_GIVEUP_TIME`: time (in seconds) before `proxpi` will redirect to the
+  proxied index server for file downloads instead of waiting for the download,
+  default: 0.9
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
