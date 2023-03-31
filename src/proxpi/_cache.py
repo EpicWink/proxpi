@@ -26,6 +26,7 @@ INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
     s for s in os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",") if s
 ]
+ALLOW_UNSAFE = os.environ.get("PROXPI_ALLOW_UNSAFE", "0") == "1"
 
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = [
@@ -336,6 +337,7 @@ class _IndexCache:
         self.index_url = index_url
         self.ttl = ttl
         self.session = session or requests.Session()
+        self.session.verify = ALLOW_UNSAFE
         self._index_t = None
         self._index_lock = threading.Lock()
         self._package_locks = _Locks()
@@ -591,6 +593,7 @@ class _FileCache:
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
         self.session = session or requests.Session()
+        self.session.verify = ALLOW_UNSAFE
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
@@ -746,6 +749,7 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        session.verify = ALLOW_UNSAFE
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"

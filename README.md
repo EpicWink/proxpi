@@ -81,6 +81,8 @@ change in a package index.
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
   `"application/octet-stream"` instead of letting Flask guess it. This may be needed
   if your package installer (eg Poetry) mishandles responses with declared encoding.
+* `PROXPI_ALLOW_UNSAFE=1` allow access to all remote indexes without validating the
+  certificate.
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
