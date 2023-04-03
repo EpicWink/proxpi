@@ -337,7 +337,6 @@ class _IndexCache:
         self.index_url = index_url
         self.ttl = ttl
         self.session = session or requests.Session()
-        self.session.verify = not ALLOW_UNSAFE
         self._index_t = None
         self._index_lock = threading.Lock()
         self._package_locks = _Locks()
@@ -593,7 +592,6 @@ class _FileCache:
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
         self.session = session or requests.Session()
-        self.session.verify = not ALLOW_UNSAFE
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
