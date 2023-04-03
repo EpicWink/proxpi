@@ -185,6 +185,10 @@ Another option is to set up a proxy, but that's more effort than the above metho
 * [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
   packages, proxy to PyPI when not-found, supports package upload, no caching
 
+* [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
+  directory of packages, with redirecting/cached proxying to indexes, authentication and
+  authorisation.
+
 * [`pypiprivate`](https://pypi.org/project/pypiprivate/): serves local (or S3-hosted)
   directory of packages, no proxy to package indices (including PyPI)
 
