@@ -41,7 +41,6 @@ DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
-_html_parser = lxml.etree.HTMLParser()
 _time_offset = time.time()
 
 
@@ -313,6 +312,22 @@ def _mask_password(url: str) -> str:
     return urllib.parse.urlunsplit(parsed)
 
 
+def _iter_html_anchor_elements(
+    stream: t.BinaryIO
+) -> t.Generator[lxml.etree.ElementBase, None, lxml.etree.ElementBase]:
+    parser = lxml.etree.HTMLPullParser(events=("end",), tag="a")
+    try:
+        while True:
+            chunk = stream.read(64 * 1024)
+            if not chunk:
+                break
+            parser.feed(chunk)
+            for _, el in parser.read_events():
+                yield el
+    finally:
+        return parser.close()
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -369,19 +384,8 @@ class _IndexCache:
             )
             return
 
-        parser = lxml.etree.HTMLParser()
-        try:
-            while True:
-                chunk = response.raw.read(64 * 1024)
-                if not chunk:
-                    break
-                parser.feed(chunk)
-        finally:
-            root = parser.close()
-
-        body = next((b for b in root if b.tag == "body"), root)
-        for child in body:
-            if child.tag == "a":
+        for child in _iter_html_anchor_elements(response.raw):
+            if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
         logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
@@ -446,19 +450,8 @@ class _IndexCache:
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
-        parser = lxml.etree.HTMLParser()
-        try:
-            while True:
-                chunk = response.raw.read(64 * 1024)
-                if not chunk:
-                    break
-                parser.feed(chunk)
-        finally:
-            root = parser.close()
-
-        body = next((b for b in root if b.tag == "body"), root)
-        for child in body:
-            if child.tag == "a":
+        for child in _iter_html_anchor_elements(response.raw):
+            if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
         self._packages[package_name] = package
