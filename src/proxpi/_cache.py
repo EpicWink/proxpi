@@ -26,6 +26,9 @@ INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
     s for s in os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",") if s
 ]
+DISABLE_INDEX_SSL_VERIFICATION = os.environ.get(
+    "PROXPI_DISABLE_INDEX_SSL_VERIFICATION", ""
+) not in ("", "0", "no", "off", "false")
 
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = [
@@ -746,6 +749,7 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        session.verify = not DISABLE_INDEX_SSL_VERIFICATION
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
