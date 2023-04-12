@@ -309,22 +309,6 @@ def _mask_password(url: str) -> str:
     return urllib.parse.urlunsplit(parsed)
 
 
-def _iter_html_anchor_elements(
-    stream: t.BinaryIO,
-) -> t.Generator[lxml.etree.ElementBase, None, lxml.etree.ElementBase]:
-    parser = lxml.etree.HTMLPullParser(events=("end",), tag="a")
-    try:
-        while True:
-            chunk = stream.read(64 * 1024)
-            if not chunk:
-                break
-            parser.feed(chunk)
-            for _, el in parser.read_events():
-                yield el
-    finally:
-        return parser.close()
-
-
 class _IndexCache:
     """Cache for an index.
 
@@ -381,7 +365,7 @@ class _IndexCache:
             )
             return
 
-        for child in _iter_html_anchor_elements(response.raw):
+        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
@@ -447,7 +431,7 @@ class _IndexCache:
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
-        for child in _iter_html_anchor_elements(response.raw):
+        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
             if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
