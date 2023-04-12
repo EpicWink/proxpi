@@ -1,10 +1,9 @@
 """Test ``proxpi`` server."""
 
-import io
 import os
 import hashlib
 import logging
-import tarfile
+import pathlib
 import warnings
 import posixpath
 import contextlib
@@ -13,23 +12,21 @@ from urllib import parse as urllib_parse
 from unittest import mock
 
 import flask
-import jinja2
 import pytest
 import requests
-import proxpi._cache  # noqa
 import proxpi.server
 import packaging.specifiers
 
 from . import _utils
 
 proxpi_server = proxpi.server
-# noinspection PyProtectedMember
-File = proxpi._cache.FileFromHTML
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 mock_index_response_is_json = False
+
+data_dir = pathlib.Path(__file__).parent / "data"
 
 
 @contextlib.contextmanager
@@ -44,79 +41,55 @@ def set_mock_index_response_is_json(value: t.Union[bool, str]):
         mock_index_response_is_json = original_mock_index_response_is_json
 
 
-def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
+def make_mock_index_app(index_name: str) -> flask.Flask:
     """Construct a mock package index app.
 
-    Warning: uses ``proxpi``'s templates for index responses, and files are
-    simple
-
     Args:
-        projects: index projects with their files
+        index_name: index name in test data indexes directory
 
     Returns:
         WSGI app for Python package simple repository index
     """
 
-    files_content = {}
-    for project_name_, files_ in projects.items():
-        for file_ in files_:
-            stream = io.BytesIO()
-            with tarfile.TarFile.open(mode="w:gz", fileobj=stream) as tf:
-                tf.addfile(
-                    tarinfo=tarfile.TarInfo(name="spam"),
-                    fileobj=io.BytesIO(file_.url.encode(encoding="utf-8")),
-                )
-            file_content_ = stream.getvalue()
-            files_content[project_name_, file_.name] = file_content_
-            if file_.fragment:
-                assert file_.fragment == "sha256="
-                file_.fragment += hashlib.sha256(file_content_).hexdigest()
-
     app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
-    app.jinja_loader = jinja2.PackageLoader("proxpi")
-
-    def build_json_v1_response(data: dict) -> flask.Response:
-        response = flask.jsonify(data)
-        response.mimetype = f"application/vnd.pypi.simple.v1+json"
-        return response
 
     @app.route("/")
     def list_projects() -> t.Union[str, flask.Response]:
         if mock_index_response_is_json:
-            return build_json_v1_response({
-                "meta": {"api-version": "1.0"},
-                "projects": [{"name": n} for n in list(projects)],
-            })  # fmt: skip
-        return flask.render_template("packages.html", package_names=list(projects))
+            file_name = "index.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        else:
+            file_name = "index.html"
+            mime_type = "text/html"
+        body = (data_dir / "indexes" / index_name / file_name).read_bytes()
+        response = flask.make_response(body)
+        response.mimetype = mime_type
+        return response
 
     @app.route("/<name>/")
     def get_project(name: str) -> t.Union[str, flask.Response]:
-        files = projects.get(name)
-        if not files:
-            flask.abort(404)
         if mock_index_response_is_json:
-            files_data = []
-            for file in files:
-                file_data = file.to_json_response()
-                file_data["url"] = file.name
-                if (
-                    mock_index_response_is_json == "yanked"
-                    and not file_data.get("yanked")
-                ):
-                    file_data["yanked"] = False
-                files_data.append(file_data)
-            return build_json_v1_response({
-                "meta": {"api-version": "1.0"},
-                "name": name,
-                "files": files_data,
-            })  # fmt: skip
-        return flask.render_template("files.html", package_name=name, files=files)
+            stem = "yanked" if mock_index_response_is_json == "yanked" else "index"
+            file_name = f"{stem}.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        else:
+            file_name = "index.html"
+            mime_type = "text/html"
+        try:
+            body = (data_dir / "indexes" / index_name / name / file_name).read_bytes()
+        except FileNotFoundError:
+            raise flask.abort(404)
+        response = flask.make_response(body)
+        response.mimetype = mime_type
+        return response
 
     @app.route("/<project_name>/<file_name>")
     def get_file(project_name: str, file_name: str) -> bytes:
-        file_content = files_content.get((project_name, file_name))
-        if not file_content:
-            flask.abort(404)
+        path = data_dir / "indexes" / index_name / project_name / file_name
+        try:
+            file_content = path.read_bytes()
+        except FileNotFoundError:
+            raise flask.abort(404)
         return file_content
 
     return app
@@ -124,83 +97,13 @@ def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
 
 @pytest.fixture(scope="module")
 def mock_root_index():
-    app = make_mock_index_app(projects={
-        "proxpi": [
-            File(
-                name="proxpi-1.1.0-py3-none-any.whl",
-                url="spam eggs 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="proxpi-1.1.0.tar.gz",
-                url="foo bar 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="proxpi-1.0.0-py3-none-any.whl",
-                url="spam eggs 41",
-                fragment="",
-                attributes={},
-            ),
-            File(
-                name="proxpi-1.0.0.tar.gz",
-                url="foo bar 42",
-                fragment="",
-                attributes={"data-requires-python": ""},
-            ),
-        ],
-        "numpy": [
-            File(
-                name="numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
-                url="",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-            File(
-                name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
-                url="",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8", "data-yanked": ""},
-            ),
-            File(
-                name="numpy-1.23.1.tar.gz",
-                url="foo bar 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-        ],
-    })  # fmt: skip
+    app = make_mock_index_app(index_name="root")
     yield from _utils.make_server(app)
 
 
 @pytest.fixture(scope="module")
 def mock_extra_index():
-    app = make_mock_index_app(projects={
-        "scipy": [
-            File(
-                name="scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
-                url="spam eggs 17",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="scipy-1.9.0.tar.gz",
-                url="foo bar 17",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-        ],
-        "numpy": [
-            File(
-                name="numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
-                url="spam eggs 40c",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-        ],
-    })  # fmt: skip
+    app = make_mock_index_app(index_name="extra")
     yield from _utils.make_server(app)
 
 

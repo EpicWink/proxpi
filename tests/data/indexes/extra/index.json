@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "api-version": "1.0"
+  },
+  "projects": [
+    {
+      "name": "scipy"
+    },
+    {
+      "name": "numpy"
+    }
+  ]
+}
