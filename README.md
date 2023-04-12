@@ -82,6 +82,9 @@ change in a package index.
   `"application/octet-stream"` instead of letting Flask guess it. This may be needed
   if your package installer (eg Poetry) mishandles responses with declared encoding.
 * `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
+* `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
+  proxied index server for file downloads instead of waiting for the download,
+  default: 0.9
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):

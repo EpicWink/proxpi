@@ -37,6 +37,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
+DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -581,18 +582,25 @@ class _FileCache:
     _evict_lock: threading.Lock
 
     def __init__(
-        self, max_size: int, cache_dir: str = None, session: requests.Session = None
+        self,
+        max_size: int,
+        cache_dir: str = None,
+        download_timeout: float = 0.9,
+        session: requests.Session = None,
     ):
         """Initialise file-cache.
 
         Args:
             max_size: maximum file-cache size
             cache_dir: file-cache directory
+            download_timeout: file download timeout (seconds), falling back to
+                redirect
             session: index request session
         """
 
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
+        self.download_timeout = download_timeout
         self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
         self._files = {}
@@ -657,11 +665,17 @@ class _FileCache:
         logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
-        """Wait 0.9s for existing download."""
+        """Wait for existing download, if any.
+
+        Returns:
+            whether the wait is given up (ie if time-out was reached or
+                exception was encountered)
+        """
+
         file = self._files.get(url)
         if isinstance(file, Thread):
             try:
-                file.join(0.9)
+                file.join(self.download_timeout)
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
@@ -755,7 +769,9 @@ class Cache:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
-        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
+        file_cache = cls._file_cache_cls(
+            CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
+        )
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
                 f"Number of extra index URLs doesn't equal number of extra index "
