@@ -1,6 +1,5 @@
 """Package index interfacing and caching."""
 
-import io
 import os
 import re
 import abc
