@@ -310,7 +310,7 @@ def _mask_password(url: str) -> str:
 
 
 def _iter_html_anchor_elements(
-    stream: t.BinaryIO
+    stream: t.BinaryIO,
 ) -> t.Generator[lxml.etree.ElementBase, None, lxml.etree.ElementBase]:
     parser = lxml.etree.HTMLPullParser(events=("end",), tag="a")
     try:
