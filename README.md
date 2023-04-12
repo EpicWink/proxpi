@@ -81,6 +81,7 @@ change in a package index.
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
   `"application/octet-stream"` instead of letting Flask guess it. This may be needed
   if your package installer (eg Poetry) mishandles responses with declared encoding.
+* `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,
   default: 0.9
@@ -187,6 +188,10 @@ Another option is to set up a proxy, but that's more effort than the above metho
 
 * [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
   packages, proxy to PyPI when not-found, supports package upload, no caching
+
+* [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
+  directory of packages, with redirecting/cached proxying to indexes, authentication and
+  authorisation.
 
 * [`pypiprivate`](https://pypi.org/project/pypiprivate/): serves local (or S3-hosted)
   directory of packages, no proxy to package indices (including PyPI)
