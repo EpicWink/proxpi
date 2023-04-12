@@ -223,9 +223,20 @@ def server(mock_root_index, mock_extra_index):
         yield from _utils.make_server(proxpi_server.app)
 
 
+@pytest.fixture
+def clear_index_cache(server):
+    proxpi.server.cache.invalidate_list()
+
+
+@pytest.fixture
+def clear_projects_cache(server):
+    for project_name in proxpi.server.cache.list_projects():
+        proxpi.server.cache.invalidate_project(project_name)
+
+
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
 @pytest.mark.parametrize("index_json_response", [False, True])
-def test_list(server, accept, index_json_response):
+def test_list(server, accept, index_json_response, clear_index_cache):
     """Test getting package list."""
     with set_mock_index_response_is_json(index_json_response):
         response = requests.get(f"{server}/index/", headers={"Accept": accept})
@@ -255,7 +266,9 @@ def test_list(server, accept, index_json_response):
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("index_json_response", [False, True])
-def test_list_json(server, accept, index_json_response):
+def test_list_json(
+    server, accept, index_json_response, mock_root_index, clear_index_cache
+):
     """Test getting package list with JSON API."""
     with set_mock_index_response_is_json(index_json_response):
         response = requests.get(f"{server}/index/", headers={"Accept": accept})
@@ -275,7 +288,7 @@ def test_list_json(server, accept, index_json_response):
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
 @pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
-def test_package(server, project, accept, index_json_response):
+def test_package(server, project, accept, index_json_response, clear_projects_cache):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
     with set_mock_index_response_is_json(index_json_response):
@@ -354,7 +367,9 @@ def test_package(server, project, accept, index_json_response):
 ])
 @pytest.mark.parametrize("query_format", [False, True])
 @pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
-def test_package_json(server, project, accept, query_format, index_json_response):
+def test_package_json(
+    server, project, accept, query_format, index_json_response, clear_projects_cache
+):
     """Test getting package files with JSON API."""
     params = None
     headers = None
