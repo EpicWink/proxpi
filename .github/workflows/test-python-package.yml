@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - master
+      - stream-index-response
     tags:
       - v*
 
