@@ -23,7 +23,8 @@ A clear and concise description of what you expected to happen.
 Include current behaviour and output.
 
 ## Environment
-* `seddy`: version
-* Python: version
-* OS: Windows 10 / Ubuntu 18.04 / OSX
-* `boto3`: version
+* `proxpi`: *version*
+* Environment: *Docker container / virtual environment / system*
+* Python: *version*
+* OS: *Windows 10 / Ubuntu 18.04 / OSX*
+* *Other relevant packages' versions*

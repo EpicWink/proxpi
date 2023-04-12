@@ -3,6 +3,7 @@
 import io
 import os
 import re
+import abc
 import time
 import shutil
 import logging
@@ -18,10 +19,16 @@ import urllib.parse
 import requests
 import lxml.etree
 
+if t.TYPE_CHECKING:
+    import xml.etree.ElementTree
+
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
     s for s in os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",") if s
 ]
+DISABLE_INDEX_SSL_VERIFICATION = os.environ.get(
+    "PROXPI_DISABLE_INDEX_SSL_VERIFICATION", ""
+) not in ("", "0", "no", "off", "false")
 
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = [
@@ -30,30 +37,205 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
+DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
 _html_parser = lxml.etree.HTMLParser()
+_time_offset = time.time()
+
+
+def _now() -> float:
+    return time.monotonic() + _time_offset
+
+
+class File(metaclass=abc.ABCMeta):
+    """Package file reference."""
+
+    @property
+    @abc.abstractmethod
+    def name(self) -> str:
+        """Filename."""
+
+    @property
+    @abc.abstractmethod
+    def url(self) -> str:
+        """File URL."""
+
+    @property
+    @abc.abstractmethod
+    def fragment(self) -> str:
+        """File URL fragment."""
+
+    @property
+    @abc.abstractmethod
+    def attributes(self) -> t.Dict[str, str]:
+        """File reference link element (non-href) attributes."""
+
+    @property
+    @abc.abstractmethod
+    def hashes(self) -> t.Dict[str, str]:
+        """File hashes."""
+
+    @property
+    @abc.abstractmethod
+    def requires_python(self) -> t.Union[str, None]:
+        """Distribution Python requirement."""
+
+    @property
+    @abc.abstractmethod
+    def dist_info_metadata(self) -> t.Union[bool, t.Dict[str, str], None]:
+        """Distribution metadata file marker."""
+
+    @property
+    @abc.abstractmethod
+    def gpg_sig(self) -> t.Union[bool, None]:
+        """Distribution GPG signature file marker."""
+
+    @property
+    @abc.abstractmethod
+    def yanked(self) -> t.Union[bool, str, None]:
+        """File yanked status."""
+
+    def to_json_response(self) -> t.Dict[str, t.Any]:
+        """Serialise to JSON response data (with 'url' key)."""
+        data = {"filename": self.name, "hashes": self.hashes}
+        if self.requires_python is not None:
+            data["requires-python"] = self.requires_python
+        if self.dist_info_metadata is not None:
+            data["dist-info-metadata"] = self.dist_info_metadata
+        if self.gpg_sig is not None:
+            data["gpg-sig"] = self.gpg_sig
+        if self.yanked is not None:
+            data["yanked"] = self.yanked
+        return data
 
 
 @dataclasses.dataclass
-class File:
-    """Package file reference."""
-
+class FileFromHTML(File):
     __slots__ = ("name", "url", "fragment", "attributes")
 
     name: str
-    """Filename."""
-
     url: str
-    """File URL."""
-
     fragment: str
-    """File URL fragment."""
-
     attributes: t.Dict[str, str]
-    """File reference link element (non-href) attributes."""
+
+    @classmethod
+    def from_html_element(
+        cls, el: "xml.etree.ElementTree.Element", request_url: str
+    ) -> "File":
+        """Construct from HTML API response."""
+        url = urllib.parse.urljoin(request_url, el.attrib["href"])
+        return cls(
+            name=el.text,
+            url=url,
+            fragment=urllib.parse.urlsplit(url).fragment,
+            attributes={k: v for k, v in el.attrib.items() if k != "href"},
+        )
+
+    @property
+    def hashes(self):
+        return self._parse_hash(self.fragment)
+
+    @property
+    def requires_python(self):
+        return self.attributes.get("data-requires-python") or None
+
+    @property
+    def dist_info_metadata(self):
+        metadata = self.attributes.get("data-dist-info-metadata")
+        if metadata is None:
+            return None
+        hashes = self._parse_hash(metadata)
+        if not hashes:
+            return True  # '': value-less -> true
+        return hashes
+
+    @property
+    def gpg_sig(self):
+        has_gpg_sig = self.attributes.get("data-gpg-sig")
+        return has_gpg_sig and self.attributes.get("data-gpg-sig") == "true"
+
+    @property
+    def yanked(self):
+        return self.attributes.get("data-yanked") is not None  # '': value-less -> true
+
+    @staticmethod
+    def _parse_hash(hash_string: str) -> t.Dict[str, str]:
+        try:
+            hash_name, hash_value = hash_string.split("=")
+        except ValueError:
+            if hash_string.count("=") > 0:
+                raise
+            return {}
+        return {hash_name: hash_value}
+
+
+@dataclasses.dataclass
+class FileFromJSON(File):
+    __slots__ = (
+        "name",
+        "url",
+        "hashes",
+        "requires_python",
+        "dist_info_metadata",
+        "gpg_sig",
+        "yanked",
+    )
+
+    name: str
+    url: str
+    hashes: t.Dict[str, str]
+    requires_python: t.Union[str, None]
+    dist_info_metadata: t.Union[bool, t.Dict[str, str], None]
+    gpg_sig: t.Union[bool, None]
+    yanked: t.Union[bool, str, None]
+
+    @classmethod
+    def from_json_response(cls, data: t.Dict[str, t.Any], request_url: str) -> "File":
+        """Construct from JSON API response."""
+        return cls(
+            name=data["filename"],
+            url=urllib.parse.urljoin(request_url, data["url"]),
+            hashes=data["hashes"],
+            requires_python=data.get("requires-python"),
+            dist_info_metadata=data.get("dist-info-metadata"),
+            gpg_sig=data.get("gpg-sig"),
+            yanked=data.get("yanked"),
+        )
+
+    @property
+    def fragment(self) -> str:
+        """File URL fragment."""
+        return self._stringify_hashes(self.hashes)
+
+    @property
+    def attributes(self) -> t.Dict[str, str]:
+        """File reference link element (non-href) attributes."""
+        attributes = {}
+        if self.requires_python:
+            attributes["data-requires-python"] = self.requires_python
+        if self.dist_info_metadata:
+            attributes["data-dist-info-metadata"] = self._stringify_hashes(
+                self.dist_info_metadata,
+            ) if isinstance(self.dist_info_metadata, dict) else ""  # fmt: skip
+        if self.gpg_sig is not None:
+            attributes["data-gpg-sig"] = "true" if self.gpg_sig else "false"
+        if self.yanked:
+            attributes["data-yanked"] = (
+                self.yanked if isinstance(self.yanked, str) else ""
+            )
+        return attributes
+
+    @staticmethod
+    def _stringify_hashes(hashes: t.Dict[str, str]) -> str:
+        if not hashes:
+            return ""
+        if "sha256" in hashes:
+            return f"sha256={hashes['sha256']}"
+        for hash_name, hash_value in hashes.items():
+            return f"{hash_name}={hash_value}"
 
 
 @dataclasses.dataclass
@@ -149,6 +331,10 @@ class _IndexCache:
     _package_locks: _Locks
     _index: t.Dict[str, str]
     _packages: t.Dict[str, Package]
+    _headers = {"Accept": (
+        "application/vnd.pypi.simple.v1+json, "
+        "application/vnd.pypi.simple.v1+html;q=0.1"
+    )}  # fmt: skip
 
     def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
         self.index_url = index_url
@@ -166,15 +352,23 @@ class _IndexCache:
 
     def _list_packages(self):
         """List projects using or updating cache."""
-        if self._index_t is not None and (time.monotonic() - self._index_t) < self.ttl:
+        if self._index_t is not None and _now() < self._index_t + self.ttl:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(
-            self.index_url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}, stream=True
-        )
+        response = self.session.get(self.index_url, headers=self._headers, stream=True)
         response.raise_for_status()
-        self._index_t = time.monotonic()
+        self._index_t = _now()
+
+        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+            response_data = response.json()
+            for project in response_data["projects"]:
+                name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
+                self._index[name_normalised] = f"{name_normalised}/"
+            logger.debug(
+                f"Finished listing packages in index '{self._index_url_masked}'",
+            )
+            return
 
         parser = lxml.etree.HTMLParser()
         try:
@@ -186,7 +380,7 @@ class _IndexCache:
         finally:
             root = parser.close()
 
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
                 name = _name_normalise_re.sub("-", child.text).lower()
@@ -223,27 +417,35 @@ class _IndexCache:
     def _list_files(self, package_name: str):
         """List project files using or updating cache."""
         package = self._packages.get(package_name)
-        if package and time.monotonic() < package.refreshed + self.ttl:
+        if package and _now() < package.refreshed + self.ttl:
             return
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
-        if time.monotonic() > (self._index_t or 0.0) + self.ttl:
+        if self._index_t is None or _now() > self._index_t + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
-            response = self.session.get(
-                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}, stream=True
-            )
-
+            logger.debug(f"Refreshing '{package_name}'")
+            response = self.session.get(url, headers=self._headers, stream=True)
         if not response or not response.ok:
-            if package_name not in self.list_projects():
+            logger.debug(f"List-files response: {response}")
+            package_name_normalised = _name_normalise_re.sub("-", package_name).lower()
+            if package_name_normalised not in self.list_projects():
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(
-                url, headers={"Accept": "application/vnd.pypi.simple.v1+html"}, stream=True
-            )
+            response = self.session.get(url, headers=self._headers, stream=True)
             response.raise_for_status()
-        refreshed = time.monotonic()
+
+        package = Package(package_name, files={}, refreshed=_now())
+
+        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+            response_data = response.json()
+            for file_data in response_data["files"]:
+                file = FileFromJSON.from_json_response(file_data, response.request.url)
+                package.files[file.name] = file
+            self._packages[package_name] = package
+            logger.debug(f"Finished listing files in package '{package_name}'")
+            return
 
         parser = lxml.etree.HTMLParser()
         try:
@@ -255,15 +457,11 @@ class _IndexCache:
         finally:
             root = parser.close()
 
-        package = Package(package_name, files={}, refreshed=refreshed)
-        body = next(b for b in root if b.tag == "body")
+        body = next((b for b in root if b.tag == "body"), root)
         for child in body:
             if child.tag == "a":
-                name = child.text
-                url = urllib.parse.urljoin(response.request.url, child.attrib["href"])
-                attributes = {k: v for k, v in child.attrib.items() if k != "href"}
-                fragment = urllib.parse.urlsplit(url).fragment
-                package.files[name] = File(name, url, fragment, attributes)
+                file = FileFromHTML.from_html_element(child, response.request.url)
+                package.files[file.name] = file
         self._packages[package_name] = package
         logger.debug(f"Finished listing files in package '{package_name}'")
 
@@ -400,18 +598,25 @@ class _FileCache:
     _evict_lock: threading.Lock
 
     def __init__(
-        self, max_size: int, cache_dir: str = None, session: requests.Session = None
+        self,
+        max_size: int,
+        cache_dir: str = None,
+        download_timeout: float = 0.9,
+        session: requests.Session = None,
     ):
         """Initialise file-cache.
 
         Args:
             max_size: maximum file-cache size
             cache_dir: file-cache directory
+            download_timeout: file download timeout (seconds), falling back to
+                redirect
             session: index request session
         """
 
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
+        self.download_timeout = download_timeout
         self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
         self._files = {}
@@ -476,11 +681,17 @@ class _FileCache:
         logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
-        """Wait 0.9s for existing download."""
+        """Wait for existing download, if any.
+
+        Returns:
+            whether the wait is given up (ie if time-out was reached or
+                exception was encountered)
+        """
+
         file = self._files.get(url)
         if isinstance(file, Thread):
             try:
-                file.join(0.9)
+                file.join(self.download_timeout)
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
@@ -568,12 +779,15 @@ class Cache:
     def from_config(cls):
         """Create cache from configuration."""
         session = requests.Session()
+        session.verify = not DISABLE_INDEX_SSL_VERIFICATION
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
-        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
+        file_cache = cls._file_cache_cls(
+            CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
+        )
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
                 f"Number of extra index URLs doesn't equal number of extra index "
@@ -642,7 +856,7 @@ class Cache:
             for file in extra_files:
                 if file.name not in {f.name for f in files}:
                     files.append(file)
-        if exc:
+        if not files and exc:
             raise exc
         return files
 

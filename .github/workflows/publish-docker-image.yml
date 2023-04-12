@@ -8,7 +8,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Build image
       run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Login to DockerHub

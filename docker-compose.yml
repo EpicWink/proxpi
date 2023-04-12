@@ -1,0 +1,6 @@
+services:
+  proxpi:
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+    image: epicwink/proxpi:latest
