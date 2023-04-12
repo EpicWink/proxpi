@@ -18,9 +18,6 @@ import urllib.parse
 import requests
 import lxml.etree
 
-if t.TYPE_CHECKING:
-    import xml.etree.ElementTree
-
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
     s for s in os.environ.get("PROXPI_EXTRA_INDEX_URLS", "").strip().split(",") if s
@@ -121,7 +118,7 @@ class FileFromHTML(File):
 
     @classmethod
     def from_html_element(
-        cls, el: "xml.etree.ElementTree.Element", request_url: str
+        cls, el: "lxml.etree.ElementBase", request_url: str
     ) -> "File":
         """Construct from HTML API response."""
         url = urllib.parse.urljoin(request_url, el.attrib["href"])
