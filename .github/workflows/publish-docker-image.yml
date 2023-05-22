@@ -9,22 +9,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
-    - name: Publish image
-      run: docker push "epicwink/proxpi:${{ github.ref_name }}"
     - name: Check tag
       id: check-tag
       run: |
         if [[ "${{ github.ref_name }}" =~ ^v\d+\.\d+\.\d+$ ]]; then
             echo ::set-output name=match::true
         fi
+    - name: Publish image
+      if: steps.check-tag.outputs.match != 'true'
+      run: |
+        docker buildx prune -f
+        docker buildx create --name docker-builder
+        docker buildx use docker-builder
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7 \
+          -t "epicwink/proxpi:${{ github.ref_name }}" \
+          --push .
+        docker buildx rm docker-builder
     - name: Publish latest image
       if: steps.check-tag.outputs.match == 'true'
       run: |
-        docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
-        docker push epicwink/proxpi:latest
+        docker buildx prune -f
+        docker buildx create --name docker-builder
+        docker buildx use docker-builder
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7 \
+          -t "epicwink/proxpi:${{ github.ref_name }}" \
+          -t "epicwink/proxpi:latest" \
+          --push .
+        docker buildx rm docker-builder
