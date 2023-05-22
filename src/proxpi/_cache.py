@@ -228,7 +228,14 @@ class _IndexCache:
             if child.tag == "a":
                 name = child.text
                 url = urllib.parse.urljoin(response.request.url, child.attrib["href"])
-                attributes = {k: v for k, v in child.attrib.items() if k != "href"}
+                attributes = {
+                    k: v
+                    for k, v in child.attrib.items()
+                    # Specifically ignore dist-info-metadat attribute: this version of
+                    # proxpi doesn't support serving the file. See GitHub issue
+                    # EpicWink/proxpi#23
+                    if k not in ("href", "data-dist-info-metadata")
+                }
                 fragment = urllib.parse.urlsplit(url).fragment
                 package.files[name] = File(name, url, fragment, attributes)
         self._packages[package_name] = package

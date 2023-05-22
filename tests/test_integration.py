@@ -48,6 +48,7 @@ def test_pip_download(server, tmp_path):
         "download",
         "--index-url",
         "http://127.0.0.1:5042/index/",
+        "--no-deps",
     ]
     p = subprocess.run(
         [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"]
@@ -62,6 +63,9 @@ def test_pip_download(server, tmp_path):
     contents = list((tmp_path / "dest2").iterdir())
     print(contents)
     assert any("jinja2" in p.name.lower() for p in contents)
+    subprocess.run(
+        [*args, "--dest", str(tmp_path / "dest3"), "sphinx == 7.0.1"], check=True
+    )
 
 
 def test_list(server):
