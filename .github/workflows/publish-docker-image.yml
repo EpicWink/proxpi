@@ -3,6 +3,9 @@ name: publish-docker
 on:
   release:
     types: [created]
+  push:
+    branches:
+      - christian-td-master
 
 jobs:
   release:
@@ -23,6 +26,7 @@ jobs:
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
     - name: Publish image
+      if: github.event_name == 'release'
       run: docker push "epicwink/proxpi:${{ github.ref_name }}"
     - name: Check tag
       id: check-tag
@@ -31,7 +35,7 @@ jobs:
             echo ::set-output name=match::true
         fi
     - name: Publish latest image
-      if: steps.check-tag.outputs.match == 'true'
+      if: github.event_name == 'release' && steps.check-tag.outputs.match == 'true'
       run: |
         docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
         docker push epicwink/proxpi:latest
