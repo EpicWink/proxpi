@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker buildx build  --platform linux/amd64,linux/arm64,linux/arm/v7 . --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
