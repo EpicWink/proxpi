@@ -453,13 +453,10 @@ def test_nonexistant_file_from_existing_package(server):
 @pytest.fixture
 def readonly_package_dir(tmp_path):
     package_dir = tmp_path / "packages"
-    package_dir.mkdir(mode=0o555)
+    package_dir.touch()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pytest.PytestUnhandledThreadExceptionWarning)
-        try:
-            yield package_dir
-        finally:
-            (tmp_path / "packages").chmod(0o755)  # allow clean-up
+        yield package_dir
 
 
 def test_download_file_failed(mock_root_index, server, readonly_package_dir):
