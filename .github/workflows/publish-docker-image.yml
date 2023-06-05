@@ -19,6 +19,8 @@ jobs:
         "epicwink/proxpi:${{ github.ref_name }}"
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
+    - name: Run image test
+      run: tests/test-docker-image.sh "${{ github.ref_name }}"
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
