@@ -1,16 +1,22 @@
 name: publish-docker
 
 on:
-  release:
-    types: [created]
+  push:
+    branches:
+      - docker-test
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: ['linux/amd64', 'linux/arm64', 'linux/arm/v7']
     steps:
     - uses: actions/checkout@v3
     - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker buildx build .
+        --platform "${{ matrix.platform }}"
+        --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Run unit-tests in image
       run: docker run
         --rm
@@ -21,20 +27,3 @@ jobs:
         && pytest -vvra /srv/tests'
     - name: Run image test
       run: tests/test-docker-image.sh "${{ github.ref_name }}"
-    - name: Login to DockerHub
-      run: >
-        echo ${{ secrets.DOCKERHUB_PASSWORD }}
-        | docker login --password-stdin -u epicwink
-    - name: Publish image
-      run: docker push "epicwink/proxpi:${{ github.ref_name }}"
-    - name: Check tag
-      id: check-tag
-      run: |
-        if [[ "${{ github.ref_name }}" =~ '^v\d+\.\d+\.\d+$' ]]; then
-            echo ::set-output name=match::true
-        fi
-    - name: Publish latest image
-      if: steps.check-tag.outputs.match == 'true'
-      run: |
-        docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
-        docker push epicwink/proxpi:latest
