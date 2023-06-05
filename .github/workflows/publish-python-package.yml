@@ -20,6 +20,12 @@ jobs:
     - name: Build package
       run: |
         pyproject-build --outdir dist/
+    - name: Install package
+      run: pip install dist/*.whl
+    - name: Run unit-tests
+      run: |
+        pip install -r tests/requirements.txt
+        pytest -vvra
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
