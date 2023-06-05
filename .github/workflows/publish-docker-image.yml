@@ -11,6 +11,14 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build image
       run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+    - name: Run unit-tests in image
+      run: docker run
+        --rm
+        --volume "$(pwd)/tests:/srv/tests"
+        --entrypoint ''
+        "epicwink/proxpi:${{ github.ref_name }}"
+        sh -c 'pip install --requirement /srv/tests/requirements.txt
+        && pytest -vvra /srv/tests'
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
