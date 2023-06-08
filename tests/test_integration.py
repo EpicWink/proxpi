@@ -241,6 +241,11 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
             else:
                 assert gpg_response.status_code == 404
 
+        if any(k == "data-dist-info-metadata" for k, _ in attributes):
+            (value,) = (v for k, v in attributes if k == "data-dist-info-metadata")
+            (expected,) = (v for k, v in attributes if k == "data-core-metadata")
+            assert value == expected
+
         if any(k == "data-core-metadata" for k, _ in attributes):
             (expected_core_metadata_hash,) = (
                 v for k, v in attributes if k == "data-core-metadata"
