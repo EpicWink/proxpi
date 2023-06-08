@@ -156,6 +156,10 @@ class FileFromHTML(File):
             return None
         hashes = self._parse_hash(metadata)
         if not hashes:
+            if metadata not in ("", "true"):
+                logger.warning(
+                    f"Invalid metadata attribute value from index: {metadata}"
+                )
             return True  # '': value-less -> true
         return hashes
 
@@ -170,12 +174,9 @@ class FileFromHTML(File):
 
     @staticmethod
     def _parse_hash(hash_string: str) -> t.Dict[str, str]:
-        try:
-            hash_name, hash_value = hash_string.split("=")
-        except ValueError:
-            if hash_string.count("=") > 0:
-                raise
+        if "=" not in hash_string:
             return {}
+        hash_name, hash_value = hash_string.split("=")
         return {hash_name: hash_value}
 
 
