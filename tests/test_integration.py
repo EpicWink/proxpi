@@ -52,22 +52,25 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
     """
 
     app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
+    indexes_dir_relative_path = pathlib.PurePath("data") / "indexes"
 
     @app.route("/")
-    def list_projects() -> t.Union[str, flask.Response]:
+    def list_projects() -> flask.Response:
         if mock_index_response_is_json:
             file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
         else:
             file_name = "index.html"
             mime_type = "text/html"
-        body = (data_dir / "indexes" / index_name / file_name).read_bytes()
-        response = flask.make_response(body)
-        response.mimetype = mime_type
-        return response
+
+        return flask.send_from_directory(
+            directory=indexes_dir_relative_path,
+            path=pathlib.PurePath(index_name) / file_name,
+            mimetype=mime_type,
+        )
 
     @app.route("/<name>/")
-    def get_project(name: str) -> t.Union[str, flask.Response]:
+    def get_project(name: str) -> flask.Response:
         if mock_index_response_is_json:
             stem = "yanked" if mock_index_response_is_json == "yanked" else "index"
             file_name = f"{stem}.json"
@@ -75,22 +78,20 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
         else:
             file_name = "index.html"
             mime_type = "text/html"
-        try:
-            body = (data_dir / "indexes" / index_name / name / file_name).read_bytes()
-        except FileNotFoundError:
-            raise flask.abort(404)
-        response = flask.make_response(body)
-        response.mimetype = mime_type
-        return response
+
+        return flask.send_from_directory(
+            directory=indexes_dir_relative_path,
+            path=pathlib.PurePath(index_name) / name / file_name,
+            mimetype=mime_type,
+        )
 
     @app.route("/<project_name>/<file_name>")
-    def get_file(project_name: str, file_name: str) -> bytes:
-        path = data_dir / "indexes" / index_name / project_name / file_name
-        try:
-            file_content = path.read_bytes()
-        except FileNotFoundError:
-            raise flask.abort(404)
-        return file_content
+    def get_file(project_name: str, file_name: str) -> flask.Response:
+        return flask.send_from_directory(
+            directory=indexes_dir_relative_path,
+            path=pathlib.PurePath(index_name) / project_name / file_name,
+            mimetype="application/octect-stream",
+        )
 
     return app
 
