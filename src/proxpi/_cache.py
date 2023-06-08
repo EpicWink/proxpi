@@ -101,7 +101,8 @@ class File(metaclass=abc.ABCMeta):
         if self.requires_python is not None:
             data["requires-python"] = self.requires_python
         if self.dist_info_metadata is not None:
-            data["dist-info-metadata"] = self.dist_info_metadata
+            # PEP 714: only emit new key in JSON
+            data["core-metadata"] = self.dist_info_metadata
         if self.gpg_sig is not None:
             data["gpg-sig"] = self.gpg_sig
         if self.yanked is not None:
@@ -124,11 +125,20 @@ class FileFromHTML(File):
     ) -> "File":
         """Construct from HTML API response."""
         url = urllib.parse.urljoin(request_url, el.attrib["href"])
+
+        attributes = {k: v for k, v in el.attrib.items() if k != "href"}
+
+        # PEP 714: accept both core-metadata attributes, and emit both in HTML
+        if "data-core-metadata" in attributes:
+            attributes["data-dist-info-metadata"] = attributes["data-core-metadata"]
+        elif "data-dist-info-metadata" in attributes:
+            attributes["data-core-metadata"] = attributes["data-dist-info-metadata"]
+
         return cls(
             name=el.text,
             url=url,
             fragment=urllib.parse.urlsplit(url).fragment,
-            attributes={k: v for k, v in el.attrib.items() if k != "href"},
+            attributes=attributes,
         )
 
     @property
@@ -141,7 +151,7 @@ class FileFromHTML(File):
 
     @property
     def dist_info_metadata(self):
-        metadata = self.attributes.get("data-dist-info-metadata")
+        metadata = self.attributes.get("data-core-metadata")
         if metadata is None:
             return None
         hashes = self._parse_hash(metadata)
@@ -198,7 +208,10 @@ class FileFromJSON(File):
             url=urllib.parse.urljoin(request_url, data["url"]),
             hashes=data["hashes"],
             requires_python=data.get("requires-python"),
-            dist_info_metadata=data.get("dist-info-metadata"),
+            # PEP 714: accept both core-metadata keys
+            dist_info_metadata=(
+                data.get("core-metadata") or data.get("dist-info-metadata")
+            ),
             gpg_sig=data.get("gpg-sig"),
             yanked=data.get("yanked"),
         )
@@ -218,6 +231,8 @@ class FileFromJSON(File):
             attributes["data-dist-info-metadata"] = self._stringify_hashes(
                 self.dist_info_metadata,
             ) if isinstance(self.dist_info_metadata, dict) else ""  # fmt: skip
+            # PEP 714: emit both core-metadata attributes in HTML
+            attributes["data-core-metadata"] = attributes["data-dist-info-metadata"]
         if self.gpg_sig is not None:
             attributes["data-gpg-sig"] = "true" if self.gpg_sig else "false"
         if self.yanked:

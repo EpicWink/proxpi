@@ -241,6 +241,26 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
             else:
                 assert gpg_response.status_code == 404
 
+        if any(k == "data-dist-info-metadata" for k, _ in attributes):
+            (value,) = (v for k, v in attributes if k == "data-dist-info-metadata")
+            (expected,) = (v for k, v in attributes if k == "data-core-metadata")
+            assert value == expected
+
+        if any(k == "data-core-metadata" for k, _ in attributes):
+            (expected_core_metadata_hash,) = (
+                v for k, v in attributes if k == "data-core-metadata"
+            )
+            core_metadata_response = requests.get(urllib_parse.urljoin(
+                project_url, href_stripped + ".metadata"
+            ))
+            core_metadata_response.raise_for_status()
+            if expected_core_metadata_hash and expected_core_metadata_hash != "true":
+                hash_name, expected_hash_value = expected_core_metadata_hash.split("=")
+                core_metadata_hash_value = hashlib.new(
+                    hash_name, core_metadata_response.content
+                ).hexdigest()
+                assert core_metadata_hash_value == expected_hash_value
+
         if any(k == "data-requires-python" for k, _ in attributes):
             (python_requirement,) = (
                 v for k, v in attributes if k == "data-requires-python"
@@ -279,10 +299,10 @@ def test_package_json(
         params = {"format": accept}
     else:
         headers = {"Accept": accept}
+    project_url = f"{server}/index/{project}/"
+
     with set_mock_index_response_is_json(index_json_response):
-        response = requests.get(
-            f"{server}/index/{project}/", params=params, headers=headers
-        )
+        response = requests.get(project_url, params=params, headers=headers)
 
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (
@@ -300,6 +320,26 @@ def test_package_json(
         assert file["url"]
         assert file["filename"] == file["url"]
         assert isinstance(file["hashes"], dict)
+
+        assert not file.get("dist-info-metadata")
+
+        url_parts: urllib_parse.SplitResult = urllib_parse.urlsplit(file["url"])
+        url_parts_stripped = url_parts._replace(fragment="")
+        url_stripped = url_parts_stripped.geturl()
+        assert url_stripped == file["filename"]
+
+        if file.get("core-metadata"):
+            core_metadata_response = requests.get(
+                urllib_parse.urljoin(project_url, url_stripped + ".metadata"),
+            )
+            core_metadata_response.raise_for_status()
+
+            if isinstance(file["core-metadata"], dict):
+                for hash_name, expected_hash_value in file["core-metadata"].items():
+                    core_metadata_hash_value = hashlib.new(
+                        hash_name, core_metadata_response.content
+                    ).hexdigest()
+                    assert core_metadata_hash_value == expected_hash_value
 
     files_by_filename = {f["filename"]: f for f in response_data["files"]}
     if project == "proxpi":
