@@ -72,6 +72,19 @@ def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
                 assert file_.fragment == "sha256="
                 file_.fragment += hashlib.sha256(file_content_).hexdigest()
 
+            if file_.dist_info_metadata:
+                core_metadata_content = (
+                    b"Metadata-Version: 2.3\nName: spam\nVersion: 1.0"
+                )
+                files_content[project_name_, f"{file_.name}.metadata"] = core_metadata_content
+
+                if file_.dist_info_metadata == {"sha256": ""}:
+                    hash_ = hashlib.sha256(core_metadata_content).hexdigest()
+                    if isinstance(file_, File):
+                        file_.attributes["data-core-metadata"] = f"sha256={hash_}"
+                    else:
+                        file_.dist_info_metadata["sha256"] = hash_
+
     app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
     app.jinja_loader = jinja2.PackageLoader("proxpi")
 
@@ -157,6 +170,24 @@ def mock_root_index():
                 url="",
                 fragment="sha256=",
                 attributes={"data-requires-python": ">=3.8"},
+            ),
+            File(
+                name="numpy-1.23.1-cp310-cp310-manylinux_2_24_x86_64.whl",
+                url="",
+                fragment="sha256=",
+                attributes={
+                    "data-requires-python": ">=3.8",
+                    "data-core-metadata": "",
+                },
+            ),
+            File(
+                name="numpy-1.23.1-cp310-cp310-manylinux_2_28_x86_64.whl",
+                url="",
+                fragment="sha256=",
+                attributes={
+                    "data-requires-python": ">=3.8",
+                    "data-core-metadata": "sha256=",
+                },
             ),
             File(
                 name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
@@ -338,6 +369,21 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
                 gpg_response.raise_for_status()
             else:
                 assert gpg_response.status_code == 404
+
+        if any(k == "data-core-metadata" for k, _ in attributes):
+            (expected_core_metadata_hash,) = (
+                v for k, v in attributes if k == "data-core-metadata"
+            )
+            core_metadata_response = requests.get(urllib_parse.urljoin(
+                project_url, href_stripped + ".metadata"
+            ))
+            core_metadata_response.raise_for_status()
+            if expected_core_metadata_hash and expected_core_metadata_hash != "true":
+                hash_name, expected_hash_value = expected_core_metadata_hash.split("=")
+                core_metadata_hash_value = hashlib.new(
+                    hash_name, core_metadata_response.content
+                ).hexdigest()
+                assert core_metadata_hash_value == expected_hash_value
 
         if any(k == "data-requires-python" for k, _ in attributes):
             (python_requirement,) = (
