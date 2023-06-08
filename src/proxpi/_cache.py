@@ -164,12 +164,9 @@ class FileFromHTML(File):
 
     @staticmethod
     def _parse_hash(hash_string: str) -> t.Dict[str, str]:
-        try:
-            hash_name, hash_value = hash_string.split("=")
-        except ValueError:
-            if hash_string.count("=") > 0:
-                raise
+        if "=" not in hash_string:
             return {}
+        hash_name, hash_value = hash_string.split("=")
         return {hash_name: hash_value}
 
 
