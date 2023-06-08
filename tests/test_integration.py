@@ -26,8 +26,6 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 mock_index_response_is_json = False
 
-data_dir = pathlib.Path(__file__).parent / "data"
-
 
 @contextlib.contextmanager
 def set_mock_index_response_is_json(value: t.Union[bool, str]):
