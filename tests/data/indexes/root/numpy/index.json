@@ -6,8 +6,7 @@
         "sha256": "38d1e325e3d8828d3361730fc935aabb9cc5ab14f7ea99f9438f2768e2c5f272"
       },
       "requires-python": ">=3.8",
-      "url": "numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
-      "yanked": false
+      "url": "numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl"
     },
     {
       "filename": "numpy-1.23.1-cp310-cp310-win_amd64.whl",
@@ -24,8 +23,7 @@
         "sha256": "0024c61ffaf1d4b424eaff554bb6cec1cfd580cc2ff64ca7858c7ced6b880429"
       },
       "requires-python": ">=3.8",
-      "url": "numpy-1.23.1.tar.gz",
-      "yanked": false
+      "url": "numpy-1.23.1.tar.gz"
     }
   ],
   "meta": {
