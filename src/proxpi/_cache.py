@@ -146,6 +146,10 @@ class FileFromHTML(File):
             return None
         hashes = self._parse_hash(metadata)
         if not hashes:
+            if metadata not in ("", "true"):
+                logger.warning(
+                    f"Invalid metadata attribute value from index: {metadata}"
+                )
             return True  # '': value-less -> true
         return hashes
 
