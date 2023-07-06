@@ -113,13 +113,13 @@ def server(mock_root_index, mock_extra_index):
     root_patch = mock.patch.object(
         proxpi.server.cache,
         "root_cache",
-        proxpi.server.cache._index_cache_cls(f"{mock_root_index}/", 15, session),
+        proxpi.server.cache._index_cache_cls(f"{mock_root_index}/", 15, session=session),
     )
     # noinspection PyProtectedMember
     extras_patch = mock.patch.object(
         proxpi.server.cache,
         "extra_caches",
-        [proxpi.server.cache._index_cache_cls(f"{mock_extra_index}/", 10, session)],
+        [proxpi.server.cache._index_cache_cls(f"{mock_extra_index}/", 10, session=session)],
     )
     with root_patch, extras_patch:
         yield from _utils.make_server(proxpi_server.app)

@@ -85,6 +85,14 @@ change in a package index.
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,
   default: 0.9
+* `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
+  connect to the index server before `requests` raises a `ConnectTimeout` error
+  to prevent indefinite blocking
+  default: 5
+* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for a chunk of data 
+  from the index server before `requests` raises a ReadTimeout error to prevent
+  indefinite blocking
+  default: 5
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):

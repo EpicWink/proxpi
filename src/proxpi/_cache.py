@@ -35,6 +35,8 @@ EXTRA_INDEX_TTLS = [
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
+CONNECT_TIMEOUT = float(os.environ.get("PROXPI_CONNECT_TIMEOUT", 5))
+READ_TIMEOUT = float(os.environ.get("PROXPI_READ_TIMEOUT", 5))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -333,6 +335,8 @@ class _IndexCache:
     Args:
         index_url: index URL
         ttl: cache time-to-live
+        connect_timeout: Requests socket connection timeout (seconds)
+        read_timeout: Requests read timeout (seconds)
         session: index request session
     """
 
@@ -349,9 +353,18 @@ class _IndexCache:
         "application/vnd.pypi.simple.v1+html;q=0.1"
     )}  # fmt: skip
 
-    def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
+    def __init__(
+        self,
+        index_url: str,
+        ttl: int,
+        connect_timeout: float = 5,
+        read_timeout: float = 5,
+        session: requests.Session = None,
+    ):
         self.index_url = index_url
         self.ttl = ttl
+        self.connect_timeout = connect_timeout
+        self.read_timeout = read_timeout
         self.session = session or requests.Session()
         self._index_t = None
         self._index_lock = threading.Lock()
@@ -369,7 +382,7 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(self.index_url, headers=self._headers)
+        response = self._http_get(self.index_url)
         response.raise_for_status()
         self._index_t = _now()
 
@@ -430,7 +443,7 @@ class _IndexCache:
         if self._index_t is None or _now() > self._index_t + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
             logger.debug(f"Refreshing '{package_name}'")
-            response = self.session.get(url, headers=self._headers)
+            response = self._http_get(url)
         if not response or not response.ok:
             logger.debug(f"List-files response: {response}")
             package_name_normalised = _name_normalise_re.sub("-", package_name).lower()
@@ -438,7 +451,7 @@ class _IndexCache:
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(url, headers=self._headers)
+            response = self._http_get(url)
             response.raise_for_status()
 
         package = Package(package_name, files={}, refreshed=_now())
@@ -547,6 +560,11 @@ class _IndexCache:
             return
         self._packages.pop(package_name, None)
 
+    def _http_get(self, url: str, **kwargs: t.Any) -> requests.Response:
+        kwargs.setdefault("timeout", (self.connect_timeout, self.read_timeout))
+        kwargs.setdefault("headers", self._headers)
+        return self.session.get(url, **kwargs)
+
 
 @dataclasses.dataclass
 class _CachedFile:
@@ -599,6 +617,8 @@ class _FileCache:
         max_size: int,
         cache_dir: str = None,
         download_timeout: float = 0.9,
+        connect_timeout: float = 5,
+        read_timeout: float = 5,
         session: requests.Session = None,
     ):
         """Initialise file-cache.
@@ -608,12 +628,16 @@ class _FileCache:
             cache_dir: file-cache directory
             download_timeout: file download timeout (seconds), falling back to
                 redirect
+            connect_timeout: Requests socket connection timeout (seconds)
+            read_timeout: Requests read timeout (seconds)
             session: index request session
         """
 
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
         self.download_timeout = download_timeout
+        self.connect_timeout = connect_timeout
+        self.read_timeout = read_timeout
         self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
         self._files = {}
@@ -661,7 +685,11 @@ class _FileCache:
 
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
-        response = self.session.get(url, stream=True)
+        response = self.session.get(
+            url,
+            timeout=(self.connect_timeout, self.read_timeout),
+            stream=True,
+        )
         if response.status_code // 100 >= 4:
             logger.error(
                 f"Failed to download '{url_masked}': "
@@ -719,7 +747,10 @@ class _FileCache:
 
     def _evict_lfu(self, url: str):
         """Evict least-frequently-used files until under max cache size."""
-        response = self.session.head(url)
+        response = self.session.head(
+            url,
+            timeout=(self.connect_timeout, self.read_timeout),
+        )
         file_size = int(response.headers.get("Content-Length", 0)) if response.ok else 0
         cache_keys = [u for u, f in self._files.items() if isinstance(f, _CachedFile)]
         cache_keys.sort(key=lambda k: self._files[k].size)
@@ -781,9 +812,20 @@ class Cache:
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
 
-        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
+        root_cache = cls._index_cache_cls(
+            INDEX_URL,
+            INDEX_TTL,
+            CONNECT_TIMEOUT,
+            READ_TIMEOUT,
+            session,
+        )
         file_cache = cls._file_cache_cls(
-            CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
+            CACHE_SIZE,
+            CACHE_DIR,
+            DOWNLOAD_TIMEOUT,
+            CONNECT_TIMEOUT,
+            READ_TIMEOUT,
+            session,
         )
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
@@ -791,7 +833,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl, session)
+            cls._index_cache_cls(url, ttl, CONNECT_TIMEOUT, READ_TIMEOUT, session)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
