@@ -53,6 +53,22 @@ pip \
   || (cleanUp && false)
 echo "step 2 passed" 1>&2
 
+docker save epicwink/proxpi:$1 -o container.tar
+
+docker run \
+  --rm \
+  -it \
+  -v ${PWD}:/data \
+  -w /data \
+  aquasec/trivy \
+  image \
+  --input container.tar \
+  --exit-code 1 \
+  || (cleanUp && false)
+
+rm -rf container.tar
+echo "step 3 passed" 1>&2
+
 cleanUp || true
 
 echo "passed" 1>&2
