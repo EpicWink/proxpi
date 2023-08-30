@@ -804,9 +804,9 @@ class Cache:
         if CONNECT_TIMEOUT and READ_TIMEOUT:
             session.default_timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
         elif CONNECT_TIMEOUT:
-            session.default_timeout = (CONNECT_TIMEOUT, 60.0)
+            session.default_timeout = (CONNECT_TIMEOUT, 20.0)
         elif READ_TIMEOUT:
-            session.default_timeout = (5.0, READ_TIMEOUT)
+            session.default_timeout = (3.1, READ_TIMEOUT)
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(

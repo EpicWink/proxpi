@@ -87,10 +87,10 @@ change in a package index.
   default: 0.9
 * `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
   connect to the index server before `requests` raises a `ConnectTimeout` error
-  to prevent indefinite blocking, default: none, or 5 if read-timeout provided
+  to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
 * `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data 
   from the index server before `requests` raises a `ReadTimeout` error to prevent
-  indefinite blocking, default: none, or 60 if connect-timeout provided
+  indefinite blocking, default: none, or 20 if connect-timeout provided
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
