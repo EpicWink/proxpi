@@ -439,3 +439,10 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
         assert response.headers["Content-Type"] == "application/x-tar"
         assert response.headers["Content-Encoding"] == "gzip"
     response.close()
+
+
+def test_health(server):
+    """Test health endpoint."""
+    response = requests.get(f"{server}/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "success", "data": None}

@@ -225,4 +225,4 @@ def invalidate_package(package_name):
 
 @app.route("/health")
 def health():
-    return "OK"
+    return {"status": "success", "data": None}
