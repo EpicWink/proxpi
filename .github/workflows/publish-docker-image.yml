@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker buildx build  --platform linux/amd64,linux/arm64,linux/arm/v7 . --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Run unit-tests in image
       run: docker run
         --rm
