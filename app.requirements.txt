@@ -264,9 +264,9 @@ urllib3==2.0.7 \
     --hash=sha256:c97dfde1f7bd43a71c8d2a58e369e9b2bf692d1334ea9f9cae55add7d0dd0f84 \
     --hash=sha256:fdb6d215c776278489906c2f8916e6e7d4f5a9b602ccbcfdf7f016fc8da0596e
     # via requests
-werkzeug==2.3.4 \
-    --hash=sha256:1d5a58e0377d1fe39d061a5de4469e414e78ccb1e1e59c0f5ad6fa1c36c52b76 \
-    --hash=sha256:48e5e61472fee0ddee27ebad085614ebedb7af41e88f687aaf881afb723a162f
+werkzeug==3.0.1 \
+    --hash=sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc \
+    --hash=sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10
     # via flask
 
 # WARNING: The following packages were not pinned, but pip requires them to be
