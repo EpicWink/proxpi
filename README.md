@@ -19,6 +19,11 @@ See [Alternatives](#alternatives).
 
 ## Usage
 ### Start server
+Choose between running inside [Docker](https://www.docker.com/) container if you want to
+run in a known-working environment, or outside via a Python app (instructions here are
+for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
+want more control over the environment.
+
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 ```bash
