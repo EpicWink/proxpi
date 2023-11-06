@@ -209,6 +209,9 @@ Another option is to set up a proxy, but that's more effort than the above metho
 * [`pip2pi`](https://pypi.org/project/pip2pi/): manual syncing of specific packages,
   no proxy
 
+* [`nginx_pypi_cache`](https://github.com/hauntsaninja/nginx_pypi_cache): caching proxy
+  using [nginx](https://nginx.org/en/), single index
+
 * [Flask-Pypi-Proxy](https://pypi.org/project/Flask-Pypi-Proxy/): unmaintained, no cache
   size limit, no caching index pages
 
