@@ -67,11 +67,22 @@ class Thread(threading.Thread):
             self.exc = e
 
 
-def make_server(app: "flask.Flask") -> t.Generator[str, None, None]:
+def make_server(
+    app: "flask.Flask",
+    auth: t.Tuple[t.Optional[str], t.Optional[str]] = (None, None),
+) -> t.Generator[str, None, None]:
     server = werkzeug.serving.make_server(host="localhost", port=0, app=app)
     thread = Thread(target=server.serve_forever, args=(0.05,))
     thread.start()
-    yield f"http://localhost:{server.port}"
+    username, password = auth
+    creds = ""
+    if username is not None:
+        creds = username
+        if password is not None:
+            creds += f":{password}"
+        creds += "@"
+
+    yield f"http://{creds}localhost:{server.port}"
     server.shutdown()
     thread.join(timeout=0.1)
     if thread.exc:
