@@ -377,7 +377,7 @@ class _IndexCache:
             response_data = response.json()
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
-                self._index[name_normalised] = f"{name_normalised}/"
+                self._index[name_normalised] = name_normalised
             logger.debug(
                 f"Finished listing packages in index '{self._index_url_masked}'",
             )

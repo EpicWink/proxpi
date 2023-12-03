@@ -8,7 +8,7 @@
 </head>
 <body>
     {%- for package in package_names %}
-    <a href="{{ package }}/">{{ package }}</a><br />
+    <a href="{{ url_for('list_files', package_name=package) }}">{{ package }}</a><br />
     {%- endfor %}
 </body>
 </html>

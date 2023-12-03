@@ -8,7 +8,7 @@
 </head>
 <body>
     {%- for file in files %}
-    <a href="{{ file.name }}{% if file.fragment %}#{{ file.fragment }}{% endif %}"
+    <a href="{{ url_for('get_file', package_name=package_name, file_name=file.name, _anchor=file.fragment|default(none)) }}"
         {%- for key, value in file.attributes.items() %} {{ key }}="{{ value }}"{% endfor -%}
     >{{ file.name }}</a><br />
     {%- endfor %}
