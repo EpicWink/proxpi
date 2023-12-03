@@ -165,7 +165,7 @@ def list_packages():
     return _compress(response)
 
 
-@app.route("/index/<package_name>/")
+@app.route("/index/<string:package_name>", strict_slashes=False)
 def list_files(package_name: str):
     """List all files for a project."""
     try:
@@ -195,7 +195,7 @@ def list_files(package_name: str):
     return _compress(response)
 
 
-@app.route("/index/<package_name>/<file_name>")
+@app.route("/index/<string:package_name>/<string:file_name>")
 def get_file(package_name: str, file_name: str):
     """Download a file."""
     try:
@@ -216,8 +216,8 @@ def invalidate_list():
     return {"status": "success", "data": None}
 
 
-@app.route("/cache/<package_name>", methods=["DELETE"])
-def invalidate_package(package_name):
+@app.route("/cache/<string:package_name>", methods=["DELETE"])
+def invalidate_package(package_name: str):
     """Invalidate project file list cache."""
     cache.invalidate_project(package_name)
     return {"status": "success", "data": None}
