@@ -160,7 +160,7 @@ def test_list(server, accept, index_json_response, clear_index_cache):
     assert parser.anchors
     for text, attributes in parser.anchors:
         (href,) = (v for k, v in attributes if k == "href")
-        assert href == f"{text}/"
+        assert pathlib.Path(href).name == text
 
 
 @pytest.mark.parametrize("accept", [
@@ -218,10 +218,10 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
         href_parsed: urllib_parse.SplitResult = urllib_parse.urlsplit(href)
         href_parsed_stripped = href_parsed._replace(fragment="")
         href_stripped = href_parsed_stripped.geturl()
-        assert href_stripped == text
+        assert pathlib.Path(href_stripped).name == text
 
         if href_parsed.fragment and not file_downloaded:
-            file_response = requests.get(urllib_parse.urljoin(project_url, href))
+            file_response = requests.get(urllib_parse.urljoin(server, href))
             file_response.raise_for_status()
 
             for part in href_parsed.fragment.split(","):
