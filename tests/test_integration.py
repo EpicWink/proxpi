@@ -446,3 +446,4 @@ def test_health(server):
     response = requests.get(f"{server}/health")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "data": None}
+    assert response.headers["Content-Type"] == "application/json"
