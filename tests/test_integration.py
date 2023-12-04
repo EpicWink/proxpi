@@ -374,6 +374,14 @@ def test_invalidate_package(server):
     assert response.json() == {"status": "success", "data": None}
 
 
+def test_health(server):
+    """Test health endpoint."""
+    response = requests.get(f"{server}/health")
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "application/json"
+    assert response.json() == {"status": "success", "data": None}
+
+
 def test_nonexistant_package(server):
     """Test getting non-existant package file list."""
     response = requests.get(f"{server}/index/ultraspampackage/")
