@@ -36,6 +36,17 @@ CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
+CONNECT_TIMEOUT = (
+    float(os.environ["PROXPI_CONNECT_TIMEOUT"])
+    if os.environ.get("PROXPI_CONNECT_TIMEOUT")
+    else None
+)
+READ_TIMEOUT = (
+    float(os.environ["PROXPI_READ_TIMEOUT"])
+    if os.environ.get("PROXPI_READ_TIMEOUT")
+    else None
+)
+
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
@@ -305,6 +316,15 @@ class _Locks:
                 if k not in self._locks:
                     self._locks[k] = threading.Lock()
         return self._locks[k]
+
+
+class Session(requests.Session):
+    default_timeout: t.Union[float, t.Tuple[float, float], None] = None
+
+    def send(self, request: requests.PreparedRequest, **kwargs) -> requests.Response:
+        if self.default_timeout and not kwargs.get("timeout"):
+            kwargs["timeout"] = self.default_timeout
+        return super().send(request, **kwargs)
 
 
 def _mask_password(url: str) -> str:
@@ -775,11 +795,18 @@ class Cache:
     @classmethod
     def from_config(cls):
         """Create cache from configuration."""
-        session = requests.Session()
+        session = Session()
         session.verify = not DISABLE_INDEX_SSL_VERIFICATION
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
+
+        if CONNECT_TIMEOUT and READ_TIMEOUT:
+            session.default_timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
+        elif CONNECT_TIMEOUT:
+            session.default_timeout = (CONNECT_TIMEOUT, 20.0)
+        elif READ_TIMEOUT:
+            session.default_timeout = (3.1, READ_TIMEOUT)
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(
