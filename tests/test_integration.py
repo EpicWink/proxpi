@@ -26,6 +26,12 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 mock_index_response_is_json = False
 
+CREDENTIALS = [
+    ("username", "password"),
+    ("username", None),
+    (None, None),
+]
+
 
 @contextlib.contextmanager
 def set_mock_index_response_is_json(value: t.Union[bool, str]):
@@ -94,20 +100,25 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
     return app
 
 
+@pytest.fixture(scope="module", params=CREDENTIALS)
+def mock_auth(request):
+    return request.param
+
+
 @pytest.fixture(scope="module")
-def mock_root_index():
+def mock_root_index(mock_auth):
     app = make_mock_index_app(index_name="root")
-    yield from _utils.make_server(app)
+    yield from _utils.make_server(app, mock_auth)
 
 
 @pytest.fixture(scope="module")
-def mock_extra_index():
+def mock_extra_index(mock_auth):
     app = make_mock_index_app(index_name="extra")
-    yield from _utils.make_server(app)
+    yield from _utils.make_server(app, mock_auth)
 
 
 @pytest.fixture(scope="module")
-def server(mock_root_index, mock_extra_index):
+def server(mock_root_index, mock_extra_index, mock_auth):
     session = proxpi.server.cache.root_cache.session
     # noinspection PyProtectedMember
     root_patch = mock.patch.object(
@@ -122,7 +133,7 @@ def server(mock_root_index, mock_extra_index):
         [proxpi.server.cache._index_cache_cls(f"{mock_extra_index}/", 10, session)],
     )
     with root_patch, extras_patch:
-        yield from _utils.make_server(proxpi_server.app)
+        yield from _utils.make_server(proxpi_server.app, mock_auth)
 
 
 @pytest.fixture
