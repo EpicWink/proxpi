@@ -58,6 +58,10 @@ def _now() -> float:
     return time.monotonic() + _time_offset
 
 
+def _parse_version(s: str) -> t.Tuple[int, ...]:
+    return tuple(int(p) for p in s.split("."))
+
+
 class File(metaclass=abc.ABCMeta):
     """Package file reference."""
 
@@ -106,6 +110,18 @@ class File(metaclass=abc.ABCMeta):
     def yanked(self) -> t.Union[bool, str, None]:
         """File yanked status."""
 
+    @property
+    @abc.abstractmethod
+    def size(self) -> t.Union[int, None]:
+        """File size (bytes) (simple repository API v1.1 - PEP 700)."""
+
+    @property
+    @abc.abstractmethod
+    def upload_time(self) -> t.Union[str, None]:
+        """File upload-time (ISO-format, zulu time-zone) (simple repository
+        API v1.1 - PEP 700).
+        """
+
     def to_json_response(self) -> t.Dict[str, t.Any]:
         """Serialise to JSON response data (with 'url' key)."""
         data = {"filename": self.name, "hashes": self.hashes}
@@ -118,6 +134,10 @@ class File(metaclass=abc.ABCMeta):
             data["gpg-sig"] = self.gpg_sig
         if self.yanked is not None:
             data["yanked"] = self.yanked
+        if self.size is not None:
+            data["size"] = self.size
+        if self.upload_time is not None:
+            data["upload-time"] = self.upload_time
         return data
 
 
@@ -183,6 +203,14 @@ class FileFromHTML(File):
     def yanked(self):
         return self.attributes.get("data-yanked") is not None  # '': value-less -> true
 
+    @property
+    def size(self) -> None:
+        return None
+
+    @property
+    def upload_time(self) -> None:
+        return None
+
     @staticmethod
     def _parse_hash(hash_string: str) -> t.Dict[str, str]:
         if "=" not in hash_string:
@@ -201,6 +229,8 @@ class FileFromJSON(File):
         "dist_info_metadata",
         "gpg_sig",
         "yanked",
+        "size",
+        "upload_time",
     )
 
     name: str
@@ -210,6 +240,8 @@ class FileFromJSON(File):
     dist_info_metadata: t.Union[bool, t.Dict[str, str], None]
     gpg_sig: t.Union[bool, None]
     yanked: t.Union[bool, str, None]
+    size: t.Union[int, None]
+    upload_time: t.Union[str, None]
 
     @classmethod
     def from_json_response(cls, data: t.Dict[str, t.Any], request_url: str) -> "File":
@@ -225,6 +257,8 @@ class FileFromJSON(File):
             ),
             gpg_sig=data.get("gpg-sig"),
             yanked=data.get("yanked"),
+            size=data.get("size"),
+            upload_time=data.get("upload-time"),
         )
 
     @property
@@ -266,7 +300,7 @@ class FileFromJSON(File):
 class Package:
     """Package files cache."""
 
-    __slots__ = ("name", "files", "refreshed")
+    __slots__ = ("name", "files", "refreshed", "versions")
 
     name: str
     """Package name."""
@@ -276,6 +310,9 @@ class Package:
 
     refreshed: float
     """Package last refreshed time (seconds)."""
+
+    versions: t.Union[t.List[str], None]
+    """Package versions (simple repository API v1.1 - PEP 700)."""
 
 
 class NotFound(ValueError):
@@ -461,7 +498,7 @@ class _IndexCache:
             response = self.session.get(url, headers=self._headers)
             response.raise_for_status()
 
-        package = Package(package_name, files={}, refreshed=_now())
+        package = Package(package_name, files={}, refreshed=_now(), versions=None)
 
         if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
@@ -469,6 +506,10 @@ class _IndexCache:
                 file = FileFromJSON.from_json_response(file_data, response.request.url)
                 package.files[file.name] = file
             self._packages[package_name] = package
+            if _parse_version(
+                (response_data.get("meta") or {}).get("api-version") or "1.0",
+            ) >= (1, 1):
+                package.versions = response_data.get("versions")
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
@@ -482,14 +523,14 @@ class _IndexCache:
         self._packages[package_name] = package
         logger.debug(f"Finished listing files in package '{package_name}'")
 
-    def list_files(self, package_name: str) -> t.ValuesView[File]:
+    def list_files(self, package_name: str) -> Package:
         """List project files.
 
         Args:
             package_name: name of project to list files of
 
         Returns:
-            files of project
+            project details, with files and versions (if available)
 
         Raises:
             NotFound: if project doesn't exist in index
@@ -497,7 +538,7 @@ class _IndexCache:
 
         with self._package_locks[package_name]:
             self._list_files(package_name)
-        return self._packages[package_name].files.values()
+        return self._packages[package_name]
 
     def get_file_url(self, package_name: str, file_name: str) -> str:
         """Get a file.
@@ -851,38 +892,54 @@ class Cache:
             packages.update(cache.list_projects())
         return sorted(packages)
 
-    def list_files(self, package_name: str) -> t.List[File]:
+    def list_files(
+        self, package_name: str
+    ) -> t.Tuple[t.List[File], t.Union[t.List[str], None]]:
         """List project files.
 
         Args:
             package_name: name of project to list files of
 
         Returns:
-            files of project
+            files of project, and versions if available from all indexes which
+                host the project
 
         Raises:
             NotFound: if project doesn't exist in any index
         """
 
-        files = []
+        files: t.Dict[str, File] = {}
+        versions: t.Union[t.Set[str], None] = set()
         exc = None
+
         try:
-            root_files = self.root_cache.list_files(package_name)
+            root_package = self.root_cache.list_files(package_name)
         except NotFound as e:
             exc = e
         else:
-            files.extend(root_files)
+            files.update(root_package.files)
+            if root_package.versions is None:
+                versions = None
+            else:
+                versions.update(root_package.versions)
+
         for cache in self.extra_caches:
             try:
-                extra_files = cache.list_files(package_name)
+                extra_package = cache.list_files(package_name)
             except NotFound:
                 continue
-            for file in extra_files:
-                if file.name not in {f.name for f in files}:
-                    files.append(file)
+
+            for file_name, file in extra_package.files.items():
+                files.setdefault(file_name, file)
+            if versions is not None and extra_package.versions is not None:
+                versions.update(extra_package.versions)
+            elif extra_package.versions is not None:
+                versions = None
+
         if not files and exc:
             raise exc
-        return files
+
+        return list(files.values()), (list(versions) if versions is not None else None)
 
     def get_file(self, package_name: str, file_name: str) -> str:
         """Get a file.

@@ -169,7 +169,7 @@ def list_packages():
 def list_files(package_name: str):
     """List all files for a project."""
     try:
-        files = cache.list_files(package_name)
+        files, versions = cache.list_files(package_name)
     except _cache.NotFound:
         flask.abort(404)
         raise
@@ -180,11 +180,20 @@ def list_files(package_name: str):
             file_data = file.to_json_response()
             file_data["url"] = file.name
             files_data.append(file_data)
-        response = _build_json_response(data={
+
+        response_data = {
             "meta": {"api-version": "1.0"},
             "name": package_name,
             "files": files_data,
-        })  # fmt: skip
+        }
+
+        if versions is not None:
+            response_data["versions"] = versions
+            if all(f.size or f.size == 0 for f in files):
+                response_data["meta"]["api-version"] = "1.1"
+            # No need to remove versions, size and upload-time for API < v1.1
+
+        response = _build_json_response(data=response_data)
 
     else:
         response = flask.make_response(
