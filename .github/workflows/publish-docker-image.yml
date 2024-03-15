@@ -1,4 +1,4 @@
-name: publish-dockerepicwink
+name: publish-dockernuvious
 
 on:
   release:
@@ -16,13 +16,13 @@ jobs:
     - name: Build image
       run: docker buildx build . 
            --platform linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
-           --tag "epicwink/proxpi:${{ github.ref_name }}"
+           --tag "nuvious/proxpi:${{ github.ref_name }}"
     - name: Run unit-tests in image
       run: docker run
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "epicwink/proxpi:${{ github.ref_name }}"
+        "nuvious/proxpi:${{ github.ref_name }}"
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
     - name: Run image test
@@ -30,9 +30,9 @@ jobs:
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
-        | docker login --password-stdin -u epicwink
+        | docker login --password-stdin -u nuvious
     - name: Publish image
-      run: docker push "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker push "nuvious/proxpi:${{ github.ref_name }}"
     - name: Check tag
       id: check-tag
       run: |
@@ -42,5 +42,5 @@ jobs:
     - name: Publish latest image
       if: steps.check-tag.outputs.match == 'true'
       run: |
-        docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
-        docker push epicwink/proxpi:latest
+        docker tag "nuvious/proxpi:${{ github.ref_name }}" nuvious/proxpi:latest
+        docker push nuvious/proxpi:latest
