@@ -1,4 +1,4 @@
-name: publish-docker
+name: publish-dockerepicwink
 
 on:
   release:
@@ -10,7 +10,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker buildx build . 
+           --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x
+           --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Run unit-tests in image
       run: docker run
         --rm

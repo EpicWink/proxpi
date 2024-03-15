@@ -1,33 +1,33 @@
-name: publish
+# name: publish
 
-on:
-  release:
-    types: [created]
+# on:
+#   release:
+#     types: [created]
 
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-    - name: Install build tools
-      run: |
-        pip install -U pip
-        pip install build
-    - name: Build package
-      run: |
-        pyproject-build --outdir dist/
-    - name: Install package
-      run: pip install dist/*.whl
-    - name: Run unit-tests
-      run: |
-        pip install -r tests/requirements.txt
-        pytest -vvra
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: ${{ secrets.PYPI_USERNAME }}
-        password: ${{ secrets.PYPI_PASSWORD }}
+# jobs:
+#   release:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - uses: actions/checkout@v3
+#     - name: Set up Python
+#       uses: actions/setup-python@v4
+#       with:
+#         python-version: '3.x'
+#     - name: Install build tools
+#       run: |
+#         pip install -U pip
+#         pip install build
+#     - name: Build package
+#       run: |
+#         pyproject-build --outdir dist/
+#     - name: Install package
+#       run: pip install dist/*.whl
+#     - name: Run unit-tests
+#       run: |
+#         pip install -r tests/requirements.txt
+#         pytest -vvra
+#     - name: Publish package
+#       uses: pypa/gh-action-pypi-publish@release/v1
+#       with:
+#         user: ${{ secrets.PYPI_USERNAME }}
+#         password: ${{ secrets.PYPI_PASSWORD }}
