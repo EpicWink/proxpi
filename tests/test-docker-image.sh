@@ -2,7 +2,7 @@
 
 # Test Docker image
 #
-# Usage: test-docker-image.sh TAG
+# Usage: test-docker-image.sh REPO/IMAGE:TAG
 # where TAG is Docker image tag (not including repository)
 
 # Make command errors cause script to fail
@@ -21,7 +21,7 @@ cleanUp () {
 # Start proxpi server
 container="$(docker create \
   --publish 5042:5000 \
-  "nuvious/proxpi:$1"
+  "$1"
 )"
 echo "created container: $container" 1>&2
 
