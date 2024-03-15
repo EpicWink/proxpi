@@ -14,16 +14,19 @@ jobs:
       with:
         platforms: linux/amd64
         # platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
-    - name: Build image
-      run: docker buildx build . 
-           --platform linux/amd64
-           --tag "nuvious/proxpi:${{ github.ref_name }}"
+    - name: Build and export to Docker
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        load: true
+        tags: nuvious/proxpi:${{ github.ref_name }}
+        platforms: linux/amd64
     - name: Run unit-tests in image
       run: docker run
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "nuvious/proxpi:${{ github.ref_name }}"
+        nuvious/proxpi:${{ github.ref_name }}
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
     - name: Run image test
@@ -32,16 +35,10 @@ jobs:
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u nuvious
-    - name: Publish image
-      run: docker push "nuvious/proxpi:${{ github.ref_name }}"
-    - name: Check tag
-      id: check-tag
-      run: |
-        if [[ "${{ github.ref_name }}" =~ '^v\d+\.\d+\.\d+$' ]]; then
-            echo ::set-output name=match::true
-        fi
-    - name: Publish latest image
-      if: steps.check-tag.outputs.match == 'true'
-      run: |
-        docker tag "nuvious/proxpi:${{ github.ref_name }}" nuvious/proxpi:latest
-        docker push nuvious/proxpi:latest
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: nuvious/proxpi:${{ github.ref_name }},nuvious/proxpi:latest
