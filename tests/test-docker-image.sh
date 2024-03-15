@@ -21,7 +21,7 @@ cleanUp () {
 # Start proxpi server
 container="$(docker create \
   --publish 5042:5000 \
-  "epicwink/proxpi:$1"
+  "nuvious/proxpi:$1"
 )"
 echo "created container: $container" 1>&2
 
