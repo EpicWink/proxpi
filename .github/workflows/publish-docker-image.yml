@@ -12,10 +12,10 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
-        platforms: linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x
+        platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
     - name: Build image
       run: docker buildx build . 
-           --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x
+           --platform linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
            --tag "epicwink/proxpi:${{ github.ref_name }}"
     - name: Run unit-tests in image
       run: docker run
