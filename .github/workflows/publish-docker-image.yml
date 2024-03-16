@@ -1,4 +1,4 @@
-name: publish-dockerepicwink
+name: publish-docker
 
 on:
   release:
@@ -32,7 +32,7 @@ jobs:
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        epicwink/proxpi:${{ github.ref_name }}
+        "epicwink/proxpi:${{ github.ref_name }}"
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
     - name: Run image test
