@@ -1,4 +1,4 @@
-name: publish-dockernuvious
+name: publish-dockerepicwink
 
 on:
   release:
@@ -23,7 +23,7 @@ jobs:
       with:
         context: .
         load: true
-        tags: nuvious/proxpi:${{ github.ref_name }}
+        tags: epicwink/proxpi:${{ github.ref_name }}
         platforms: linux/amd64
       
     # Run tests
@@ -32,21 +32,21 @@ jobs:
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        nuvious/proxpi:${{ github.ref_name }}
+        epicwink/proxpi:${{ github.ref_name }}
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
     - name: Run image test
-      run: tests/test-docker-image.sh "nuvious/proxpi:${{ github.ref_name }}"
+      run: tests/test-docker-image.sh "epicwink/proxpi:${{ github.ref_name }}"
     
     # Build all architectures and push to dockerhub
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
-        | docker login --password-stdin -u nuvious
+        | docker login --password-stdin -u epicwink
     - name: Build and push
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
         push: true
-        tags: nuvious/proxpi:${{ github.ref_name }},nuvious/proxpi:latest
+        tags: epicwink/proxpi:${{ github.ref_name }},epicwink/proxpi:latest
