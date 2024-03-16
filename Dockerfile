@@ -8,7 +8,7 @@ RUN --mount=source=.,target=/root/src/proxpi,rw \
     --requirement /root/src/proxpi/app.requirements.txt \
  && pip install --no-cache-dir --no-deps /root/src/proxpi/ \
  && pip show gunicorn \
- && apk del --purge git \
+ && apk del --purge git build-base libxslt-dev libxml2-dev \
  && pip list
 
 ENTRYPOINT [ \
