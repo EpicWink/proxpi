@@ -5,48 +5,71 @@ on:
     types: [created]
 
 jobs:
-  release:
+  build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      # Limit parallel jobs so the docker cache doesn't get thrashed
+      max-parallel: 1
+      matrix:
+        platform: [
+          {image-suffix: amd64, name: linux/amd64},
+          {image-suffix: arm64, name: linux/arm64}
+        ]
     steps:
-    # Checkout code
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    # Configure buildx to support multiple architectures
-    - name: Set up Docker Buildx
+    - name: Set up QEMU
+      if: ${{ matrix.platform.name != 'linux/amd64' }}
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Set up Docker Buildx to support multiple architectures
+      if: ${{ matrix.platform.name != 'linux/amd64' }}
       uses: docker/setup-buildx-action@v3
       with:
-        platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
-    
-    # Build amd64 for testing
-    - name: Build and export to Docker
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Build ${{ matrix.platform.image-suffix }} for testing
       uses: docker/build-push-action@v5
       with:
         context: .
         load: true
-        tags: epicwink/proxpi:${{ github.ref_name }}
-        platforms: linux/amd64
-      
-    # Run tests
-    - name: Run unit-tests in image
+        tags: epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Run unit-tests in image for ${{ matrix.platform.image-suffix }}
       run: docker run
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "epicwink/proxpi:${{ github.ref_name }}"
-        sh -c 'pip install --requirement /srv/tests/requirements.txt
+        "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
+        sh -c 'uname -a && pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
-    - name: Run image test
-      run: tests/test-docker-image.sh "epicwink/proxpi:${{ github.ref_name }}"
-    
-    # Build all architectures and push to dockerhub
+
+    - name: Run image test for ${{ matrix.platform.image-suffix }}
+      run: tests/test-docker-image.sh "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
+
+  build-and-release: 
+    needs: ['build-and-test']
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx to support multiple architectures
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: linux/amd64,linux/arm64
+            
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
-    - name: Build and push
+
+    - name: Push all architectures
       uses: docker/build-push-action@v5
       with:
         context: .
-        platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
+        platforms: linux/amd64,linux/arm64
         push: true
         tags: epicwink/proxpi:${{ github.ref_name }},epicwink/proxpi:latest
