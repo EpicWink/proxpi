@@ -8,8 +8,6 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
-      # Limit parallel jobs so the docker cache doesn't get thrashed
-      max-parallel: 1
       matrix:
         platform: [
           {image-suffix: amd64, name: linux/amd64},
