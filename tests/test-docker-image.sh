@@ -3,7 +3,6 @@
 # Test Docker image
 #
 # Usage: test-docker-image.sh REPO/IMAGE:TAG
-# where TAG is Docker image tag (not including repository)
 
 # Make command errors cause script to fail
 set -e
