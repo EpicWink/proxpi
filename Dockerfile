@@ -2,13 +2,13 @@ FROM python:3.12-alpine
 
 RUN --mount=source=.,target=/root/src/proxpi,rw \
     uname -a && cat /etc/issue && apk --version && python --version && pip --version \
- && apk --no-cache add git build-base libxslt-dev libxml2-dev \
+ && apk --no-cache add git \
  && git -C /root/src/proxpi restore .dockerignore \
  && pip install --no-cache-dir --no-deps \
     --requirement /root/src/proxpi/app.requirements.txt \
  && pip install --no-cache-dir --no-deps /root/src/proxpi/ \
  && pip show gunicorn \
- && apk del --purge git build-base libxslt-dev libxml2-dev \
+ && apk del --purge git \
  && pip list
 
 ENTRYPOINT [ \
