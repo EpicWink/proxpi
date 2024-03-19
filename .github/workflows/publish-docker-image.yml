@@ -1,6 +1,10 @@
 name: publish-docker
 
 on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
   release:
     types: [created]
 
@@ -52,6 +56,7 @@ jobs:
         "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
 
   build-and-release:
+    if: ${{ github.event_name == 'release' }}
     needs: ['build-and-test']
     runs-on: ubuntu-latest
 
