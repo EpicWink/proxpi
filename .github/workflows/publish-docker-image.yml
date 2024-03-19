@@ -1,8 +1,15 @@
 name: publish-docker
 
 on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
   release:
     types: [created]
+
+env:
+  REF_SLUG: ${{ contains(github.ref_name, '/') && github.sha || github.ref_name }}
 
 jobs:
   release:
@@ -10,31 +17,34 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ github.ref_name }}"
+      run: docker buildx build . --tag "epicwink/proxpi:${{ env.REF_SLUG }}"
     - name: Run unit-tests in image
       run: docker run
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "epicwink/proxpi:${{ github.ref_name }}"
+        "epicwink/proxpi:${{ env.REF_SLUG }}"
         sh -c 'pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
     - name: Run image test
-      run: tests/test-docker-image.sh "${{ github.ref_name }}"
+      run: tests/test-docker-image.sh "${{ env.REF_SLUG }}"
     - name: Login to DockerHub
+      if: ${{ github.event_name == 'release' }}
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
     - name: Publish image
-      run: docker push "epicwink/proxpi:${{ github.ref_name }}"
+      if: ${{ github.event_name == 'release' }}
+      run: docker push "epicwink/proxpi:${{ env.REF_SLUG }}"
     - name: Check tag
+      if: ${{ github.event_name == 'release' }}
       id: check-tag
       run: |
         if [[ "${{ github.ref_name }}" =~ '^v\d+\.\d+\.\d+$' ]]; then
             echo ::set-output name=match::true
         fi
     - name: Publish latest image
-      if: steps.check-tag.outputs.match == 'true'
+      if: ${{ github.event_name == 'release' && steps.check-tag.outputs.match == 'true' }}
       run: |
-        docker tag "epicwink/proxpi:${{ github.ref_name }}" epicwink/proxpi:latest
+        docker tag "epicwink/proxpi:${{ env.REF_SLUG }}" epicwink/proxpi:latest
         docker push epicwink/proxpi:latest
