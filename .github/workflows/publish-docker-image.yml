@@ -8,6 +8,9 @@ on:
   release:
     types: [created]
 
+env:
+  REF_SLUG: ${{ contains(github.ref_name, '/') && github.sha || github.ref_name }}
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -39,7 +42,7 @@ jobs:
       with:
         context: .
         load: true
-        tags: epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}
+        tags: epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}
         platforms: ${{ matrix.platform.name }}
 
     - name: Run unit-tests in image for ${{ matrix.platform.image-suffix }}
@@ -47,13 +50,13 @@ jobs:
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
+        "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
         sh -c 'uname -a && pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
 
     - name: Run image test for ${{ matrix.platform.image-suffix }}
       run: tests/test-docker-image.sh
-        "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
+        "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
 
   build-and-release:
     if: ${{ github.event_name == 'release' }}
