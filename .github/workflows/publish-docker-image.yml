@@ -58,7 +58,7 @@ jobs:
       run: tests/test-docker-image.sh
         "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
 
-  build-and-release:
+  build-and-publish:
     if: ${{ github.event_name == 'release' }}
     needs: ['build-and-test']
     runs-on: ubuntu-latest
@@ -82,4 +82,19 @@ jobs:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: epicwink/proxpi:${{ github.ref_name }},epicwink/proxpi:latest
+        tags: epicwink/proxpi:${{ github.ref_name }}
+
+    - name: Check tag
+      id: check-tag
+      run: |
+        if [[ "${{ github.ref_name }}" =~ '^v\d+\.\d+\.\d+$' ]]; then
+            echo ::set-output name=match::true
+        fi
+
+    - name: Push all architectures
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: epicwink/proxpi:latest
