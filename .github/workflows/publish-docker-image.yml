@@ -12,39 +12,89 @@ env:
   REF_SLUG: ${{ contains(github.ref_name, '/') && github.sha || github.ref_name }}
 
 jobs:
-  release:
+  build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+        - name: linux/amd64
+          image-suffix: amd64
+        - name: linux/arm64
+          image-suffix: arm64
+
     steps:
-    - uses: actions/checkout@v3
-    - name: Build image
-      run: docker buildx build . --tag "epicwink/proxpi:${{ env.REF_SLUG }}"
-    - name: Run unit-tests in image
+    - uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      if: ${{ matrix.platform.name != 'linux/amd64' }}
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Set up Docker Buildx to support multiple architectures
+      if: ${{ matrix.platform.name != 'linux/amd64' }}
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Build ${{ matrix.platform.image-suffix }} for testing
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        load: true
+        tags: epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}
+        platforms: ${{ matrix.platform.name }}
+
+    - name: Run unit-tests in image for ${{ matrix.platform.image-suffix }}
       run: docker run
         --rm
         --volume "$(pwd)/tests:/srv/tests"
         --entrypoint ''
-        "epicwink/proxpi:${{ env.REF_SLUG }}"
-        sh -c 'pip install --requirement /srv/tests/requirements.txt
+        "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
+        sh -c 'uname -a && pip install --requirement /srv/tests/requirements.txt
         && pytest -vvra /srv/tests'
-    - name: Run image test
-      run: tests/test-docker-image.sh "${{ env.REF_SLUG }}"
+
+    - name: Run image test for ${{ matrix.platform.image-suffix }}
+      run: tests/test-docker-image.sh
+        "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
+
+  build-and-publish:
+    if: ${{ github.event_name == 'release' }}
+    needs: ['build-and-test']
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx to support multiple architectures
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: linux/amd64,linux/arm64
+
     - name: Login to DockerHub
-      if: ${{ github.event_name == 'release' }}
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
-    - name: Publish image
-      if: ${{ github.event_name == 'release' }}
-      run: docker push "epicwink/proxpi:${{ env.REF_SLUG }}"
+
+    - name: Push all architectures
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: epicwink/proxpi:${{ github.ref_name }}
+
     - name: Check tag
-      if: ${{ github.event_name == 'release' }}
       id: check-tag
       run: |
         if [[ "${{ github.ref_name }}" =~ '^v\d+\.\d+\.\d+$' ]]; then
             echo ::set-output name=match::true
         fi
-    - name: Publish latest image
-      if: ${{ github.event_name == 'release' && steps.check-tag.outputs.match == 'true' }}
-      run: |
-        docker tag "epicwink/proxpi:${{ env.REF_SLUG }}" epicwink/proxpi:latest
-        docker push epicwink/proxpi:latest
+
+    - name: Push all architectures
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: epicwink/proxpi:latest

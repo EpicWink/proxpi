@@ -2,8 +2,7 @@
 
 # Test Docker image
 #
-# Usage: test-docker-image.sh TAG
-# where TAG is Docker image tag (not including repository)
+# Usage: test-docker-image.sh REPO/IMAGE:TAG
 
 # Make command errors cause script to fail
 set -e
@@ -21,7 +20,7 @@ cleanUp () {
 # Start proxpi server
 container="$(docker create \
   --publish 5042:5000 \
-  "epicwink/proxpi:$1"
+  "$1"
 )"
 echo "created container: $container" 1>&2
 
