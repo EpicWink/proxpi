@@ -9,10 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [
-          {image-suffix: amd64, name: linux/amd64},
-          {image-suffix: arm64, name: linux/arm64}
-        ]
+        platform:
+        - name: linux/amd64
+          image-suffix: amd64
+        - name: linux/arm64
+          image-suffix: arm64
+
     steps:
     - uses: actions/checkout@v4
 
@@ -46,11 +48,13 @@ jobs:
         && pytest -vvra /srv/tests'
 
     - name: Run image test for ${{ matrix.platform.image-suffix }}
-      run: tests/test-docker-image.sh "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
+      run: tests/test-docker-image.sh
+        "epicwink/proxpi:${{ github.ref_name }}-${{ matrix.platform.image-suffix }}"
 
-  build-and-release: 
+  build-and-release:
     needs: ['build-and-test']
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -58,7 +62,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
       with:
         platforms: linux/amd64,linux/arm64
-            
+
     - name: Login to DockerHub
       run: >
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
