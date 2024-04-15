@@ -4,8 +4,8 @@ import os
 import gzip
 import zlib
 import logging
+import pathlib
 import typing as t
-import urllib.parse
 
 import flask
 import jinja2
@@ -203,8 +203,7 @@ def get_file(package_name: str, file_name: str):
     except _cache.NotFound:
         flask.abort(404)
         raise
-    scheme = urllib.parse.urlparse(path).scheme
-    if scheme and scheme != "file":
+    if not isinstance(path, pathlib.Path):
         return flask.redirect(path)
     return flask.send_file(path, mimetype=_file_mime_type)
 
