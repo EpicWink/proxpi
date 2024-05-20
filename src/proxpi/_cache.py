@@ -35,6 +35,17 @@ CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
+CONNECT_TIMEOUT = (
+    float(os.environ["PROXPI_CONNECT_TIMEOUT"])
+    if os.environ.get("PROXPI_CONNECT_TIMEOUT")
+    else None
+)
+READ_TIMEOUT = (
+    float(os.environ["PROXPI_READ_TIMEOUT"])
+    if os.environ.get("PROXPI_READ_TIMEOUT")
+    else None
+)
+
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
@@ -99,7 +110,8 @@ class File(metaclass=abc.ABCMeta):
         if self.requires_python is not None:
             data["requires-python"] = self.requires_python
         if self.dist_info_metadata is not None:
-            data["dist-info-metadata"] = self.dist_info_metadata
+            # PEP 714: only emit new key in JSON
+            data["core-metadata"] = self.dist_info_metadata
         if self.gpg_sig is not None:
             data["gpg-sig"] = self.gpg_sig
         if self.yanked is not None:
@@ -122,11 +134,20 @@ class FileFromHTML(File):
     ) -> "File":
         """Construct from HTML API response."""
         url = urllib.parse.urljoin(request_url, el.attrib["href"])
+
+        attributes = {k: v for k, v in el.attrib.items() if k != "href"}
+
+        # PEP 714: accept both core-metadata attributes, and emit both in HTML
+        if "data-core-metadata" in attributes:
+            attributes["data-dist-info-metadata"] = attributes["data-core-metadata"]
+        elif "data-dist-info-metadata" in attributes:
+            attributes["data-core-metadata"] = attributes["data-dist-info-metadata"]
+
         return cls(
             name=el.text,
             url=url,
             fragment=urllib.parse.urlsplit(url).fragment,
-            attributes={k: v for k, v in el.attrib.items() if k != "href"},
+            attributes=attributes,
         )
 
     @property
@@ -139,11 +160,15 @@ class FileFromHTML(File):
 
     @property
     def dist_info_metadata(self):
-        metadata = self.attributes.get("data-dist-info-metadata")
+        metadata = self.attributes.get("data-core-metadata")
         if metadata is None:
             return None
         hashes = self._parse_hash(metadata)
         if not hashes:
+            if metadata not in ("", "true"):
+                logger.warning(
+                    f"Invalid metadata attribute value from index: {metadata}"
+                )
             return True  # '': value-less -> true
         return hashes
 
@@ -158,12 +183,9 @@ class FileFromHTML(File):
 
     @staticmethod
     def _parse_hash(hash_string: str) -> t.Dict[str, str]:
-        try:
-            hash_name, hash_value = hash_string.split("=")
-        except ValueError:
-            if hash_string.count("=") > 0:
-                raise
+        if "=" not in hash_string:
             return {}
+        hash_name, hash_value = hash_string.split("=")
         return {hash_name: hash_value}
 
 
@@ -195,7 +217,10 @@ class FileFromJSON(File):
             url=urllib.parse.urljoin(request_url, data["url"]),
             hashes=data["hashes"],
             requires_python=data.get("requires-python"),
-            dist_info_metadata=data.get("dist-info-metadata"),
+            # PEP 714: accept both core-metadata keys
+            dist_info_metadata=(
+                data.get("core-metadata") or data.get("dist-info-metadata")
+            ),
             gpg_sig=data.get("gpg-sig"),
             yanked=data.get("yanked"),
         )
@@ -215,6 +240,8 @@ class FileFromJSON(File):
             attributes["data-dist-info-metadata"] = self._stringify_hashes(
                 self.dist_info_metadata,
             ) if isinstance(self.dist_info_metadata, dict) else ""  # fmt: skip
+            # PEP 714: emit both core-metadata attributes in HTML
+            attributes["data-core-metadata"] = attributes["data-dist-info-metadata"]
         if self.gpg_sig is not None:
             attributes["data-gpg-sig"] = "true" if self.gpg_sig else "false"
         if self.yanked:
@@ -287,6 +314,15 @@ class _Locks:
                 if k not in self._locks:
                     self._locks[k] = threading.Lock()
         return self._locks[k]
+
+
+class Session(requests.Session):
+    default_timeout: t.Union[float, t.Tuple[float, float], None] = None
+
+    def send(self, request: requests.PreparedRequest, **kwargs) -> requests.Response:
+        if self.default_timeout and not kwargs.get("timeout"):
+            kwargs["timeout"] = self.default_timeout
+        return super().send(request, **kwargs)
 
 
 def _mask_password(url: str) -> str:
@@ -751,11 +787,18 @@ class Cache:
     @classmethod
     def from_config(cls):
         """Create cache from configuration."""
-        session = requests.Session()
+        session = Session()
         session.verify = not DISABLE_INDEX_SSL_VERIFICATION
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
+
+        if CONNECT_TIMEOUT and READ_TIMEOUT:
+            session.default_timeout = (CONNECT_TIMEOUT, READ_TIMEOUT)
+        elif CONNECT_TIMEOUT:
+            session.default_timeout = (CONNECT_TIMEOUT, 20.0)
+        elif READ_TIMEOUT:
+            session.default_timeout = (3.1, READ_TIMEOUT)
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(

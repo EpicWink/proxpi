@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "filename": "scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
+      "hashes": {
+        "sha256": "0b7293aa82710e3402010d9ce24327a22a88770c1bc3dc713d2a4d3590538107"
+      },
+      "requires-python": ">=3.7",
+      "url": "scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl"
+    },
+    {
+      "filename": "scipy-1.9.0.tar.gz",
+      "hashes": {
+        "sha256": "0024c61ffaf1d4b424eaff554bb6cec1cfd580cc2ff64ca7858c7ced6b880429"
+      },
+      "requires-python": ">=3.7",
+      "url": "scipy-1.9.0.tar.gz"
+    }
+  ],
+  "meta": {
+    "api-version": "1.0"
+  },
+  "name": "scipy"
+}

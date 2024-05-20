@@ -7,10 +7,12 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
     - name: Install build tools
@@ -20,8 +22,11 @@ jobs:
     - name: Build package
       run: |
         pyproject-build --outdir dist/
+    - name: Install package
+      run: pip install dist/*.whl
+    - name: Run unit-tests
+      run: |
+        pip install -r tests/requirements.txt
+        pytest -vvra
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: ${{ secrets.PYPI_USERNAME }}
-        password: ${{ secrets.PYPI_PASSWORD }}

@@ -221,3 +221,8 @@ def invalidate_package(package_name):
     """Invalidate project file list cache."""
     cache.invalidate_project(package_name)
     return {"status": "success", "data": None}
+
+
+@app.route("/health")
+def health():
+    return {"status": "success", "data": None}

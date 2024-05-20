@@ -19,6 +19,11 @@ See [Alternatives](#alternatives).
 
 ## Usage
 ### Start server
+Choose between running inside [Docker](https://www.docker.com/) container if you want to
+run in a known-working environment, or outside via a Python app (instructions here are
+for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
+want more control over the environment.
+
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 ```bash
@@ -85,6 +90,12 @@ change in a package index.
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,
   default: 0.9
+* `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
+  connect to the index server before `requests` raises a `ConnectTimeout` error
+  to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
+* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data 
+  from the index server before `requests` raises a `ReadTimeout` error to prevent
+  indefinite blocking, default: none, or 20 if connect-timeout provided
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
@@ -203,6 +214,9 @@ Another option is to set up a proxy, but that's more effort than the above metho
 
 * [`pip2pi`](https://pypi.org/project/pip2pi/): manual syncing of specific packages,
   no proxy
+
+* [`nginx_pypi_cache`](https://github.com/hauntsaninja/nginx_pypi_cache): caching proxy
+  using [nginx](https://nginx.org/en/), single index
 
 * [Flask-Pypi-Proxy](https://pypi.org/project/Flask-Pypi-Proxy/): unmaintained, no cache
   size limit, no caching index pages

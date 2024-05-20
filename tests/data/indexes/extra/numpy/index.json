@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "filename": "numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
+      "hashes": {
+        "sha256": "e7997abaf488af52a68bf39813ad31aec7a5e9c598e59d7a1ff67e5052697995"
+      },
+      "requires-python": ">=3.8",
+      "url": "numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl"
+    }
+  ],
+  "meta": {
+    "api-version": "1.0"
+  },
+  "name": "numpy"
+}

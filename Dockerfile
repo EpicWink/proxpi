@@ -1,4 +1,4 @@
-FROM python:3.11-alpine
+FROM python:3.12-alpine
 
 RUN --mount=source=.,target=/root/src/proxpi,rw \
     uname -a && cat /etc/issue && apk --version && python --version && pip --version \
