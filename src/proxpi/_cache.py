@@ -1,6 +1,5 @@
 """Package index interfacing and caching."""
 
-import io
 import os
 import re
 import abc
@@ -50,7 +49,6 @@ READ_TIMEOUT = (
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
-_html_parser = lxml.etree.HTMLParser()
 _time_offset = time.time()
 
 
@@ -389,7 +387,7 @@ class _IndexCache:
             return
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
-        response = self.session.get(self.index_url, headers=self._headers)
+        response = self.session.get(self.index_url, headers=self._headers, stream=True)
         response.raise_for_status()
         self._index_t = _now()
 
@@ -403,11 +401,8 @@ class _IndexCache:
             )
             return
 
-        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
-        root = tree.getroot()
-        body = next((b for b in root if b.tag == "body"), root)
-        for child in body:
-            if child.tag == "a":
+        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+            if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
         logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
@@ -450,7 +445,7 @@ class _IndexCache:
         if self._index_t is None or _now() > self._index_t + self.ttl:
             url = urllib.parse.urljoin(self.index_url, package_name)
             logger.debug(f"Refreshing '{package_name}'")
-            response = self.session.get(url, headers=self._headers)
+            response = self.session.get(url, headers=self._headers, stream=True)
         if not response or not response.ok:
             logger.debug(f"List-files response: {response}")
             package_name_normalised = _name_normalise_re.sub("-", package_name).lower()
@@ -458,7 +453,7 @@ class _IndexCache:
                 raise NotFound(package_name)
             package_url = self._index[package_name]
             url = urllib.parse.urljoin(self.index_url, package_url)
-            response = self.session.get(url, headers=self._headers)
+            response = self.session.get(url, headers=self._headers, stream=True)
             response.raise_for_status()
 
         package = Package(package_name, files={}, refreshed=_now())
@@ -472,11 +467,8 @@ class _IndexCache:
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
-        tree = lxml.etree.parse(io.BytesIO(response.content), _html_parser)
-        root = tree.getroot()
-        body = next((b for b in root if b.tag == "body"), root)
-        for child in body:
-            if child.tag == "a":
+        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+            if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
         self._packages[package_name] = package
