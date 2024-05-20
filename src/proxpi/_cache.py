@@ -674,7 +674,7 @@ class _FileCache:
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
         response = self.session.get(url, stream=True)
-        if not response.ok:
+        if response.status_code // 100 >= 4:
             logger.error(
                 f"Failed to download '{url_masked}': "
                 f"status={response.status_code}, body={response.text}"
