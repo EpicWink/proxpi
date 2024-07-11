@@ -5,12 +5,14 @@ https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
 
-PyPI caching mirror
+PyPI caching proxy
 
 * Host a proxy PyPI mirror server with caching
   * Cache the index (project list and projects' file list)
   * Cache the project files
-* Support multiple indices
+* Proxy multiple package indices
+* Provide and consume both JSON and HTML
+  [APIs](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
 * Set index cache times-to-live (individually for each index)
 * Set files cache max-size on disk
 * Manually invalidate index cache
