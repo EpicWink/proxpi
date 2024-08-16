@@ -1,5 +1,6 @@
 """Test ``proxpi`` server."""
 
+import sys
 import logging
 import posixpath
 import threading
@@ -63,9 +64,10 @@ def test_pip_download(server, tmp_path):
     contents = list((tmp_path / "dest2").iterdir())
     print(contents)
     assert any("jinja2" in p.name.lower() for p in contents)
-    subprocess.run(
-        [*args, "--dest", str(tmp_path / "dest3"), "sphinx == 7.0.1"], check=True
-    )
+    if sys.version_info >= (3, 8):
+        subprocess.run(
+            [*args, "--dest", str(tmp_path / "dest3"), "sphinx == 7.0.1"], check=True
+        )
 
 
 def test_list(server):
