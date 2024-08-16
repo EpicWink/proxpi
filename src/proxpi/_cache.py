@@ -35,6 +35,8 @@ _name_normalise_re = re.compile("[-_.]+")
 _hostname_normalise_pattern = re.compile(r"[^a-z0-9]+")
 _html_parser = lxml.etree.HTMLParser()
 
+_ignored_file_attributes = ("href", "data-core-metadata", "data-dist-info-metadata")
+
 
 @dataclasses.dataclass
 class File:
@@ -231,10 +233,10 @@ class _IndexCache:
                 attributes = {
                     k: v
                     for k, v in child.attrib.items()
-                    # Specifically ignore dist-info-metadat attribute: this version of
+                    # Specifically ignore core metadata attributes: this version of
                     # proxpi doesn't support serving the file. See GitHub issue
                     # EpicWink/proxpi#23
-                    if k not in ("href", "data-dist-info-metadata")
+                    if k not in _ignored_file_attributes
                 }
                 fragment = urllib.parse.urlsplit(url).fragment
                 package.files[name] = File(name, url, fragment, attributes)
