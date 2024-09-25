@@ -29,7 +29,14 @@ EXTRA_INDEX_URLS = [
 
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = [
-    int(s) for s in os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",") if s
+    int(s)
+    for s in (
+        os.environ.get("PROXPI_EXTRA_INDEX_TTL", "")  # backwards-compatible
+        or os.environ.get("PROXPI_EXTRA_INDEX_TTLS", "")
+    )
+    .strip()
+    .split(",")
+    if s
 ] or [180] * len(EXTRA_INDEX_URLS)
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
