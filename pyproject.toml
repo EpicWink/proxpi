@@ -33,6 +33,12 @@ requires-python = "~= 3.7"
 
 dynamic = ["version"]
 
+[project.optional-dependencies]
+pretty = [
+    "coloredlogs",
+    "colored-traceback",
+]
+
 [project.urls]
 Repository = "https://github.com/EpicWink/proxpi"
 

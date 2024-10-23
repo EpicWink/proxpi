@@ -47,7 +47,8 @@ docker compose up
 pip install proxpi
 ```
 
-Install `coloredlogs` as well to get coloured logging
+Install `proxpi[pretty]` instead to get coloured logging and tracebacks (disable by
+setting environment variable `NO_COLOR=1`).
 
 ##### Run server
 ```bash

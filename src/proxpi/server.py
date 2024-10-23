@@ -13,6 +13,13 @@ import werkzeug.exceptions
 
 from . import _cache
 
+try:
+    import colored_traceback
+except ImportError:  # pragma: no cover
+    pass
+else:  # pragma: no cover
+    colored_traceback.add_hook()
+
 fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
     import coloredlogs
