@@ -1,8 +1,46 @@
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools >= 42",
+    "setuptools >= 61.0",
     "setuptools-scm[toml] >= 3.4",
 ]
+
+[project]
+name = "proxpi"
+
+authors = [
+    { name = "Laurie O", email = "laurie_opperman@hotmail.com" },
+]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    'dataclasses >= 0.6; python_version < "3.7"',
+    "flask >= 2.0, < 4.0",
+    "jinja2 ~= 3.0",
+    "lxml >= 4.8, < 6.0",
+    "requests ~= 2.27",
+]
+description = "PyPI caching mirror"
+keywords = ["pypi", "index", "mirror", "cache"]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = "~= 3.7"
+
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/EpicWink/proxpi"
+
+[tool.setuptools]
+include-package-data = false
+package-data = { "proxpi" = ["templates/*.html"] }
+package-dir = { "" = "src" }
+packages = { find = { namespaces = false, where = ["src"] } }
 
 [tool.setuptools_scm]
