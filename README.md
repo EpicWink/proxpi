@@ -96,7 +96,7 @@ change in a package index.
 * `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
   connect to the index server before `requests` raises a `ConnectTimeout` error
   to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
-* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data 
+* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data
   from the index server before `requests` raises a `ReadTimeout` error to prevent
   indefinite blocking, default: none, or 20 if connect-timeout provided
 
@@ -176,7 +176,7 @@ This is to be run on a server you have console access to.
        "PIP_INDEX_URL=http://proxpi:5000/index/",
        "PIP_TRUSTED_HOST=proxpi",
      ]
-   
+
    [[runners.docker]]
      network_mode = "gitlab-runner-network"
      ...
