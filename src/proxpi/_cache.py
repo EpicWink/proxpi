@@ -760,7 +760,7 @@ class _FileCache:
         parent, _ = os.path.split(path)
         os.makedirs(parent, exist_ok=True)
         with open(path, "wb") as f:
-            for chunk in response.iter_content(None):
+            for chunk in response.iter_content(chunk_size=16 * 1024):
                 f.write(chunk)
         key = self._get_key(url)
         self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
@@ -776,12 +776,13 @@ class _FileCache:
 
         file = self._files.get(url)
         if isinstance(file, Thread):
+            url_masked = _mask_password(url)
+            logger.debug(f"Waiting for existing download of: {url_masked}")
             try:
                 file.join(self.download_timeout)
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
-                url_masked = _mask_password(url)
                 logger.error(f"Failed to download '{url_masked}'", exc_info=e)
                 return True
             if isinstance(self._files[url], Thread):
