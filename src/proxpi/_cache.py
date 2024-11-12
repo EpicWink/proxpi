@@ -352,6 +352,68 @@ def _mask_password(url: str) -> str:
     return urllib.parse.urlunsplit(parsed)
 
 
+class _CacheStat:
+    __slots__ = ("hits", "misses")
+
+    def __init__(self) -> None:
+        self.hits = 0
+        self.misses = 0
+
+    def __str__(self) -> str:
+        return f"hits: {self.hits}, misses: {self.misses}"
+
+
+@dataclasses.dataclass
+class _CacheStats:
+    """Cache statistics."""
+
+    name: str
+
+    _stats: t.Dict[str, _CacheStat] = dataclasses.field(
+        default_factory=dict, init=False, repr=False, hash=False, compare=False
+    )
+
+    _delayed_log: t.Union[threading.Thread, None] = dataclasses.field(
+        default=None, init=False, repr=False, hash=False, compare=False
+    )
+
+    _log_level: t.ClassVar[int] = logging.DEBUG
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._stats = {}
+        self._delayed_log = None
+
+    def _log(self) -> None:
+        time.sleep(10.0)
+        logger.log(level=self._log_level, msg=(
+            f"{self.name} cache stats:\n"
+            + "\n".join(f"{k}: {s}" for k, s in self._stats.items())
+        ))  # fmt: skip
+        self._delayed_log = None
+
+    def _add_stat(self, key: str) -> _CacheStat:
+        stat = self._stats.get(key)
+        if not stat:
+            stat = self._stats[key] = _CacheStat()
+        if not self._delayed_log:
+            self._delayed_log = threading.Thread(target=self._log)
+            self._delayed_log.start()
+        return stat
+
+    def add_hit(self, key: str) -> None:
+        if not logger.isEnabledFor(self._log_level):
+            return
+        stat = self._add_stat(key)
+        stat.hits += 1
+
+    def add_miss(self, key: str) -> None:
+        if not logger.isEnabledFor(self._log_level):
+            return
+        stat = self._add_stat(key)
+        stat.misses += 1
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -373,6 +435,7 @@ class _IndexCache:
         "application/vnd.pypi.simple.v1+json, "
         "application/vnd.pypi.simple.v1+html;q=0.1"
     )}  # fmt: skip
+    _stats: _CacheStats
 
     def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
         self.index_url = index_url
@@ -384,6 +447,7 @@ class _IndexCache:
         self._index = {}
         self._packages = {}
         self._index_url_masked = _mask_password(index_url)
+        self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
@@ -391,7 +455,9 @@ class _IndexCache:
     def _list_packages(self):
         """List projects using or updating cache."""
         if self._index_t is not None and _now() < self._index_t + self.ttl:
+            self._stats.add_hit(key="<index>")
             return
+        self._stats.add_miss(key="<index>")
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = self.session.get(self.index_url, headers=self._headers, stream=True)
@@ -445,7 +511,9 @@ class _IndexCache:
         """List project files using or updating cache."""
         package = self._packages.get(package_name)
         if package and _now() < package.refreshed + self.ttl:
+            self._stats.add_hit(key=package_name)
             return
+        self._stats.add_miss(key=package_name)
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
@@ -612,6 +680,7 @@ class _FileCache:
     _cache_dir_provided: t.Union[str, None]
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
     _evict_lock: threading.Lock
+    _stats: _CacheStats
 
     def __init__(
         self,
@@ -637,6 +706,7 @@ class _FileCache:
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
+        self._stats = _CacheStats(name="Files")
 
         self._populate_files_from_existing_cache_dir()
 
@@ -724,7 +794,9 @@ class _FileCache:
             file = self._files[url]
             assert isinstance(file, _CachedFile)
             file.n_hits += 1
+            self._stats.add_hit(key=url)
             return file.path
+        self._stats.add_miss(key=url)
         return None
 
     def _start_downloading(self, url: str):
