@@ -20,14 +20,15 @@ except ImportError:  # pragma: no cover
 else:  # pragma: no cover
     colored_traceback.add_hook()
 
+logging_level = os.environ.get("PROXPI_LOGGING_LEVEL", "INFO")
 fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
 try:
     import coloredlogs
 except ImportError:  # pragma: no cover
-    logging.basicConfig(level=logging.INFO, format=fmt)
+    logging.basicConfig(level=logging_level, format=fmt)
 else:  # pragma: no cover
     coloredlogs.install(
-        level=logging.INFO,
+        level=logging_level,
         fmt=fmt,
         field_styles={
             "asctime": {"faint": True, "color": "white"},
