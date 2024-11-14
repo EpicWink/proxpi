@@ -670,31 +670,237 @@ class _FileCache:
         parent = _hostname_normalise_pattern.sub("-", urlsplit.hostname)
         return posixpath.join(parent, *_split_path(urlsplit.path, posixpath.split))
 
-    def _download_file(self, url: str, path: str):
-        """Download a file.
+    def _format_size(self, size_bytes: int) -> str:
+        """Format file size to human readable format."""
+        for unit in ['bytes', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0 or unit == 'GB':
+                if unit == 'bytes':
+                    return f"{size_bytes} {unit}"
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f}TB"
 
+    def _format_url_and_path(self, url: str, path: str, full_info=False) -> tuple[str, str]:
+        """Format URL and path to be more concise and readable.
+        
         Args:
-            url: URL of file to download
-            path: local path to download to
+            url: The URL to format
+            path: The path to format
+            full_info: Whether to return full URL and path with highlighted package name
         """
+        try:
+            import re
+            filename = os.path.basename(path)
+            # 匹配包名和版本
+            pkg_match = re.search(r'([^/]+)-(\d[^/]+?)(?:\.whl|\.tar\.gz|\.zip|\.metadata)$', filename)
+            if pkg_match:
+                pkg_name, version = pkg_match.groups()
+                # 紫色显示包名
+                colored_name = f"\033[35m{pkg_name}\033[0m"
+                
+                if full_info:
+                    # 在完整URL中高亮包名
+                    colored_url = url.replace(pkg_name, colored_name)
+                    # 在完整路径中高亮包名
+                    colored_path = path.replace(pkg_name, colored_name)
+                    return colored_url, colored_path
+                else:
+                    # 用于进度显示的简短版本
+                    short_name = f"{colored_name}-{version}"
+                    return url, short_name
+        except Exception:
+            pass
+        return url, path
 
+    def _format_eta(self, seconds: float) -> str:
+        """Format estimated time of arrival."""
+        if seconds < 60:
+            return f"{seconds:.0f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.0f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+
+    def _download_file(self, url: str, path: str, max_retries=3):
+        """Download a file."""
         url_masked = _mask_password(url)
-        logger.debug(f"Downloading '{url_masked}' to '{path}'")
-        response = self.session.get(url, stream=True)
-        if response.status_code // 100 >= 4:
-            logger.error(
-                f"Failed to download '{url_masked}': "
-                f"status={response.status_code}, body={response.text}"
-            )
-            return
-        parent, _ = os.path.split(path)
-        os.makedirs(parent, exist_ok=True)
-        with open(path, "wb") as f:
-            for chunk in response.iter_content(None):
-                f.write(chunk)
-        key = self._get_key(url)
-        self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
-        logger.debug(f"Finished downloading '{url_masked}'")
+        colored_url, colored_path = self._format_url_and_path(url_masked, path, full_info=True)
+        _, short_path = self._format_url_and_path(url_masked, path, full_info=False)
+        is_metadata = path.endswith('.metadata')
+        
+        temp_path = path + '.downloading'
+        
+        # 检查是否存在临时文件
+        if os.path.exists(temp_path):
+            if is_metadata:
+                # metadata文件不支持断点续传，删除临时文件
+                try:
+                    os.remove(temp_path)
+                    logger.warning(f"Removed existing incomplete metadata download: {temp_path}")
+                except Exception as e:
+                    logger.error(f"Failed to remove existing incomplete metadata download {temp_path}: {str(e)}")
+            else:
+                # 对于非metadata文件，暂时保留临时文件，后续检查是否支持断点续传
+                logger.debug(f"Found existing incomplete download: {temp_path}")
+        
+        logger.info(f"Downloading {colored_url} to {colored_path}")
+        
+        for attempt in range(max_retries):
+            try:
+                # 检查是否支持断点续传
+                headers = {}
+                current_size = 0
+                
+                # 只对非metadata文件尝试断点续传
+                if os.path.exists(temp_path) and not is_metadata:
+                    current_size = os.path.getsize(temp_path)
+                    # 先发送HEAD请求检查文件大小和是否支持断点续传
+                    head_response = self.session.head(url)
+                    total_size = int(head_response.headers.get('content-length', 0))
+                    accepts_ranges = 'bytes' in head_response.headers.get('accept-ranges', '')
+                    
+                    if current_size < total_size and accepts_ranges:
+                        headers['Range'] = f'bytes={current_size}-'
+                        logger.info(f"Resuming download of {short_path} from {self._format_size(current_size)}")
+                    else:
+                        # 如果不支持断点续传或文件大小异常，删除临时文件重新下载
+                        os.remove(temp_path)
+                        current_size = 0
+                        logger.warning(f"Restarting download of {short_path} (resume not possible)")
+                
+                # metadata文件总是完整下载
+                if is_metadata:
+                    current_size = 0
+                
+                response = self.session.get(url, stream=True, headers=headers)
+                if response.status_code not in (200, 206):  # 206是断点续传的状态码
+                    logger.error(
+                        f"\033[91mFailed to download {short_path}: "
+                        f"HTTP {response.status_code}\033[0m"
+                    )
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    return None
+                    
+                total_size = (
+                    int(response.headers.get('content-range', '').split('/')[-1])
+                    if response.status_code == 206 else
+                    int(response.headers.get('content-length', 0))
+                )
+                
+                start_time = last_log_time = time.time()
+                progress_interval = 30  # 每30秒更新一次进度
+                
+                parent, _ = os.path.split(path)
+                os.makedirs(parent, exist_ok=True)
+                
+                # metadata文件总是使用wb模式
+                mode = 'wb' if is_metadata else ('ab' if response.status_code == 206 else 'wb')
+                with open(temp_path, mode) as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            if response.status_code == 200 or is_metadata:
+                                current_size += len(chunk)
+                            else:
+                                # 断点续传时，current_size需要包含已下载的部分
+                                current_size = f.tell()
+                            
+                            # 定期更新进度
+                            now = time.time()
+                            if total_size > 0 and now - last_log_time > progress_interval and not is_metadata:
+                                elapsed = now - start_time
+                                speed = current_size / elapsed / 1024 / 1024  # MB/s
+                                progress = current_size / total_size * 100
+                                
+                                if speed > 0:
+                                    remaining_bytes = total_size - current_size
+                                    eta_seconds = remaining_bytes / (speed * 1024 * 1024)
+                                    eta = self._format_eta(eta_seconds)
+                                else:
+                                    eta = "∞"
+                                
+                                logger.info(
+                                    f"Progress of {short_path}: "
+                                    f"{self._format_size(current_size)}/{self._format_size(total_size)} "
+                                    f"({progress:.1f}%) @ {speed:.1f} MB/s - ETA: {eta}"
+                                )
+                                last_log_time = now
+                
+                # metadata文件的处理
+                if is_metadata:
+                    if current_size > 0:
+                        os.rename(temp_path, path)
+                        key = self._get_key(url)
+                        self._files[key] = _CachedFile(path, current_size, 0)
+                        logger.info(
+                            f"Successfully downloaded {colored_url}\n"
+                            f"Saved to: {colored_path}\n"
+                            f"Size: {self._format_size(current_size)}"
+                        )
+                        return path
+                    else:
+                        logger.error(f"\033[91mDownloaded metadata file is empty: {short_path}\033[0m")
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        if os.path.exists(path):
+                            os.remove(path)
+                        return None
+                
+                # 非metadata文件的完整性验证
+                if total_size > 0 and current_size != total_size and not is_metadata:
+                    if attempt == max_retries - 1:
+                        logger.error(
+                            f"\033[91mFailed to download {short_path} after {max_retries} attempts: "
+                            f"incomplete download ({self._format_size(current_size)} of {self._format_size(total_size)})\033[0m"
+                        )
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        return None
+                    logger.error(
+                        f"\033[91mIncomplete download of {short_path}, "
+                        f"retrying (attempt {attempt + 2}/{max_retries})\033[0m"
+                    )
+                    continue
+                
+                os.rename(temp_path, path)
+                
+                key = self._get_key(url)
+                self._files[key] = _CachedFile(path, current_size, 0)
+                
+                # 成功时显示完整信息
+                total_time = time.time() - start_time
+                if not is_metadata:
+                    avg_speed = current_size / total_time / 1024 / 1024 if total_time > 0 else 0
+                    logger.info(
+                        f"Successfully downloaded {colored_url}\n"
+                        f"Saved to: {colored_path}\n"
+                        f"Size: {self._format_size(current_size)} @ {avg_speed:.1f} MB/s in {self._format_eta(total_time)}"
+                    )
+                else:
+                    logger.info(
+                        f"Successfully downloaded {colored_url}\n"
+                        f"Saved to: {colored_path}\n"
+                        f"Size: {self._format_size(current_size)}"
+                    )
+                return path
+                    
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"\033[91mFailed to download {short_path}: {str(e)}\033[0m")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    if os.path.exists(path):
+                        os.remove(path)
+                    return None
+                logger.error(
+                    f"\033[91mError downloading {short_path}, "
+                    f"retrying (attempt {attempt + 2}/{max_retries}): {str(e)}\033[0m"
+                )
+        
+        return None
 
     def _wait_for_existing_download(self, url: str) -> bool:
         """Wait for existing download, if any.
