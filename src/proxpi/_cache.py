@@ -761,21 +761,21 @@ class _FileCache:
         try:
             import re
             filename = os.path.basename(path)
-            # 匹配包名和版本
+            # Match package name and version
             pkg_match = re.search(r'([^/]+)-(\d[^/]+?)(?:\.whl|\.tar\.gz|\.zip|\.metadata)$', filename)
             if pkg_match:
                 pkg_name, version = pkg_match.groups()
-                # 紫色显示包名
+                # Display package name in purple.
                 colored_name = f"\033[35m{pkg_name}\033[0m"
                 
                 if full_info:
-                    # 在完整URL中高亮包名
+                    # Highlight the package name in the complete URL.
                     colored_url = url.replace(pkg_name, colored_name)
-                    # 在完整路径中高亮包名
+                    # Highlight the package name in the full path.
                     colored_path = path.replace(pkg_name, colored_name)
                     return colored_url, colored_path
                 else:
-                    # 用于进度显示的简短版本
+                    # A brief version for progress display.
                     short_name = f"{colored_name}-{version}"
                     return url, short_name
         except Exception:
@@ -802,31 +802,31 @@ class _FileCache:
         
         temp_path = path + '.downloading'
         
-        # 检查是否存在临时文件
+        # Check for the existence of temporary files.
         if os.path.exists(temp_path):
             if is_metadata:
-                # metadata文件不支持断点续传，删除临时文件
+                # The metadata file does not support resume uploading, delete temporary files.
                 try:
                     os.remove(temp_path)
                     logger.warning(f"Removed existing incomplete metadata download: {temp_path}")
                 except Exception as e:
                     logger.error(f"Failed to remove existing incomplete metadata download {temp_path}: {str(e)}")
             else:
-                # 对于非metadata文件，暂时保留临时文件，后续检查是否支持断点续传
+                # For non-metadata files, temporarily keep the temporary files and later check if resume from breakpoint is supported.
                 logger.debug(f"Found existing incomplete download: {temp_path}")
         
         logger.info(f"Downloading {colored_url} to {colored_path}")
         
         for attempt in range(max_retries):
             try:
-                # 检查是否支持断点续传
+                # Check if resuming downloads from a breakpoint is supported.
                 headers = {}
                 current_size = 0
                 
-                # 只对非metadata文件尝试断点续传
+                # Only attempt to resume the transfer for non-metadata files.
                 if os.path.exists(temp_path) and not is_metadata:
                     current_size = os.path.getsize(temp_path)
-                    # 先发送HEAD请求检查文件大小和是否支持断点续传
+                    # First, send a HEAD request to check the file size and whether it supports resuming downloads.
                     head_response = self.session.head(url)
                     total_size = int(head_response.headers.get('content-length', 0))
                     accepts_ranges = 'bytes' in head_response.headers.get('accept-ranges', '')
@@ -835,17 +835,17 @@ class _FileCache:
                         headers['Range'] = f'bytes={current_size}-'
                         logger.info(f"Resuming download of {short_path} from {self._format_size(current_size)}")
                     else:
-                        # 如果不支持断点续传或文件大小异常，删除临时文件重新下载
+                        # If resuming interrupted downloads or unusual file sizes are not supported, delete the temporary files and redownload.
                         os.remove(temp_path)
                         current_size = 0
                         logger.warning(f"Restarting download of {short_path} (resume not possible)")
                 
-                # metadata文件总是完整下载
+                # The metadata file is always downloaded completely.
                 if is_metadata:
                     current_size = 0
                 
                 response = self.session.get(url, stream=True, headers=headers)
-                if response.status_code not in (200, 206):  # 206是断点续传的状态码
+                if response.status_code not in (200, 206):  # 206 is the status code for partial content transfer.
                     logger.error(
                         f"\033[91mFailed to download {short_path}: "
                         f"HTTP {response.status_code}\033[0m"
@@ -861,12 +861,12 @@ class _FileCache:
                 )
                 
                 start_time = last_log_time = time.time()
-                progress_interval = 30  # 每30秒更新一次进度
+                progress_interval = 30  # Update progress every 30 seconds.
                 
                 parent, _ = os.path.split(path)
                 os.makedirs(parent, exist_ok=True)
                 
-                # metadata文件总是使用wb模式
+                # The metadata file is always used in wb mode.
                 mode = 'wb' if is_metadata else ('ab' if response.status_code == 206 else 'wb')
                 with open(temp_path, mode) as f:
                     for chunk in response.iter_content(chunk_size=8192):
@@ -875,10 +875,10 @@ class _FileCache:
                             if response.status_code == 200 or is_metadata:
                                 current_size += len(chunk)
                             else:
-                                # 断点续传时，current_size需要包含已下载的部分
+                                # In breakpoint resume, current_size needs to include the downloaded portion.
                                 current_size = f.tell()
                             
-                            # 定期更新进度
+                            # Regularly update progress.
                             now = time.time()
                             if total_size > 0 and now - last_log_time > progress_interval and not is_metadata:
                                 elapsed = now - start_time
@@ -899,7 +899,7 @@ class _FileCache:
                                 )
                                 last_log_time = now
                 
-                # metadata文件的处理
+                # Processing of metadata files
                 if is_metadata:
                     if current_size > 0:
                         os.rename(temp_path, path)
@@ -919,7 +919,7 @@ class _FileCache:
                             os.remove(path)
                         return None
                 
-                # 非metadata文件的完整性验证
+                # Integrity verification of non-metadata files
                 if total_size > 0 and current_size != total_size and not is_metadata:
                     if attempt == max_retries - 1:
                         logger.error(
@@ -940,7 +940,7 @@ class _FileCache:
                 key = self._get_key(url)
                 self._files[key] = _CachedFile(path, current_size, 0)
                 
-                # 成功时显示完整信息
+                # Display complete information upon success.
                 total_time = time.time() - start_time
                 if not is_metadata:
                     avg_speed = current_size / total_time / 1024 / 1024 if total_time > 0 else 0
