@@ -681,6 +681,7 @@ class _FileCache:
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
     _evict_lock: threading.Lock
     _stats: _CacheStats
+    _download_filename_suffix = ".proxpi-partial"
 
     def __init__(
         self,
@@ -726,6 +727,9 @@ class _FileCache:
         for dirpath, _, filenames in os.walk(self.cache_dir):
             for filename in filenames:
                 filepath = os.path.join(dirpath, filename)
+                if filename.endswith(self._download_filename_suffix):
+                    os.unlink(filepath)
+                    continue
                 size = os.path.getsize(filepath)
                 name = os.path.relpath(filepath, self.cache_dir)
                 if os.path != posixpath:
@@ -759,9 +763,11 @@ class _FileCache:
             return
         parent, _ = os.path.split(path)
         os.makedirs(parent, exist_ok=True)
-        with open(path, "wb") as f:
+        download_path = path + self._download_filename_suffix
+        with open(download_path, mode="wb") as f:
             for chunk in response.iter_content(chunk_size=16 * 1024):
                 f.write(chunk)
+        os.replace(download_path, path)
         key = self._get_key(url)
         self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
         logger.debug(f"Finished downloading '{url_masked}'")
