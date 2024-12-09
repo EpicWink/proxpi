@@ -76,7 +76,7 @@ jobs:
         echo ${{ secrets.DOCKERHUB_PASSWORD }}
         | docker login --password-stdin -u epicwink
 
-    - name: Push all architectures
+    - name: Build and push image for all architectures
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -91,7 +91,8 @@ jobs:
             echo ::set-output name=match::true
         fi
 
-    - name: Push all architectures
+    - name: Release image
+      if: ${{ github.event_name == 'release' && steps.check-tag.outputs.match == 'true' }}
       uses: docker/build-push-action@v5
       with:
         context: .
