@@ -352,6 +352,49 @@ def _mask_password(url: str) -> str:
     return urllib.parse.urlunsplit(parsed)
 
 
+class _ResponseReader:
+    """File-like interface for decoded response body."""
+
+    def __init__(
+        self,
+        make_iter: t.Callable[[t.Union[int, None]], t.Iterator[bytes]],
+        close: t.Callable[[], None],
+    ) -> None:
+        """Initialise reader.
+
+        Args:
+            make_iter: constructs iterator of response body chunks,
+                accepting chunk size
+            close: closes response connection
+        """
+
+        self.make_iter = make_iter
+        self.close = close
+        self._iter: t.Union[t.Iterator[bytes], None] = None
+
+    @classmethod
+    def from_response(cls, response: requests.Response) -> "_ResponseReader":
+        """Construct from response."""
+        return cls(response.iter_content, response.close)
+
+    def read(self, n: t.Union[int, None] = None) -> bytes:
+        """Read response body chunk.
+
+        Args:
+            n: chunk size
+
+        Returns:
+            response body chunk
+        """
+
+        if self._iter is None:
+            self._iter = self.make_iter(n)
+        try:
+            return next(self._iter)
+        except StopIteration:
+            return b""
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -408,7 +451,9 @@ class _IndexCache:
             )
             return
 
-        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+        stream = _ResponseReader.from_response(response)
+
+        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
@@ -474,7 +519,9 @@ class _IndexCache:
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
-        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+        stream = _ResponseReader.from_response(response)
+
+        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
