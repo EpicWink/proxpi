@@ -28,6 +28,10 @@ run in a known-working environment, or outside via a Python app (instructions he
 for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
 want more control over the environment.
 
+> **Note**: the index cache and the management of the file cache runs in memory, but is
+> not synchronised across multiple processes, so use multiple threads instead of
+> multiple processes. The cache is thread-safe.
+
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 ```bash
