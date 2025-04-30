@@ -38,7 +38,7 @@ jobs:
         platforms: ${{ matrix.platform.name }}
 
     - name: Build ${{ matrix.platform.image-suffix }} for testing
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         load: true
@@ -77,7 +77,7 @@ jobs:
         | docker login --password-stdin -u epicwink
 
     - name: Build and push image for all architectures
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         platforms: linux/amd64,linux/arm64
@@ -93,7 +93,7 @@ jobs:
 
     - name: Release image
       if: ${{ github.event_name == 'release' && steps.check-tag.outputs.match == 'true' }}
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         platforms: linux/amd64,linux/arm64
