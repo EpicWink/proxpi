@@ -12,10 +12,16 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, '3.10', '3.11', '3.12', '3.13']
+        os: [ubuntu-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        include:
+        - os: ubuntu-22.04
+          python-version: '3.7'
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -40,6 +46,6 @@ jobs:
           --cov-report term \
           --cov-config pyproject.toml
     - name: Upload coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
