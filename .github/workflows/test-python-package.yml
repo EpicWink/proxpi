@@ -4,11 +4,23 @@ on:
   pull_request:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
   push:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
     tags:
       - v*
+  release:
+    types: [created]
 
 jobs:
   test:

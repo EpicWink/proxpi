@@ -3,10 +3,26 @@ name: publish-docker
 on:
   pull_request:
     branches: [master]
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
+      - .dockerignore
+      - app.requirements.txt
+      - Dockerfile
   push:
     branches: [master]
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
+      - .dockerignore
+      - app.requirements.txt
+      - Dockerfile
   release:
-    types: [created]
+    types: [published]
 
 env:
   REF_SLUG: ${{ contains(github.ref_name, '/') && github.sha || github.ref_name }}
