@@ -4,8 +4,9 @@ The two most recent minor versions, and the most recent minor version of all maj
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 1.2.0   | :white_check_mark: |
 | 1.1.0   | :white_check_mark: |
-| 1.0.1   | :white_check_mark: |
+| 1.0.1   | :x:                |
 | 1.0.0   | :x:                |
 | < 1.0   | :x:                |
 

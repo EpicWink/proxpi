@@ -28,7 +28,14 @@ DISABLE_INDEX_SSL_VERIFICATION = os.environ.get(
 
 INDEX_TTL = int(os.environ.get("PROXPI_INDEX_TTL", 1800))
 EXTRA_INDEX_TTLS = [
-    int(s) for s in os.environ.get("PROXPI_EXTRA_INDEX_TTL", "").strip().split(",") if s
+    int(s)
+    for s in (
+        os.environ.get("PROXPI_EXTRA_INDEX_TTL", "")  # backwards-compatible
+        or os.environ.get("PROXPI_EXTRA_INDEX_TTLS", "")
+    )
+    .strip()
+    .split(",")
+    if s
 ] or [180] * len(EXTRA_INDEX_URLS)
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
@@ -382,6 +389,111 @@ def _mask_password(url: str) -> str:
     return urllib.parse.urlunsplit(parsed)
 
 
+class _CacheStat:
+    __slots__ = ("hits", "misses")
+
+    def __init__(self) -> None:
+        self.hits = 0
+        self.misses = 0
+
+    def __str__(self) -> str:
+        return f"hits: {self.hits}, misses: {self.misses}"
+
+
+@dataclasses.dataclass
+class _CacheStats:
+    """Cache statistics."""
+
+    name: str
+
+    _stats: t.Dict[str, _CacheStat] = dataclasses.field(
+        default_factory=dict, init=False, repr=False, hash=False, compare=False
+    )
+
+    _delayed_log: t.Union[threading.Thread, None] = dataclasses.field(
+        default=None, init=False, repr=False, hash=False, compare=False
+    )
+
+    _log_level: t.ClassVar[int] = logging.DEBUG
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._stats = {}
+        self._delayed_log = None
+
+    def _log(self) -> None:
+        time.sleep(10.0)
+        logger.log(level=self._log_level, msg=(
+            f"{self.name} cache stats:\n"
+            + "\n".join(f"{k}: {s}" for k, s in self._stats.items())
+        ))  # fmt: skip
+        self._delayed_log = None
+
+    def _add_stat(self, key: str) -> _CacheStat:
+        stat = self._stats.get(key)
+        if not stat:
+            stat = self._stats[key] = _CacheStat()
+        if not self._delayed_log:
+            self._delayed_log = threading.Thread(target=self._log)
+            self._delayed_log.start()
+        return stat
+
+    def add_hit(self, key: str) -> None:
+        if not logger.isEnabledFor(self._log_level):
+            return
+        stat = self._add_stat(key)
+        stat.hits += 1
+
+    def add_miss(self, key: str) -> None:
+        if not logger.isEnabledFor(self._log_level):
+            return
+        stat = self._add_stat(key)
+        stat.misses += 1
+
+
+class _ResponseReader:
+    """File-like interface for decoded response body."""
+
+    def __init__(
+        self,
+        make_iter: t.Callable[[t.Union[int, None]], t.Iterator[bytes]],
+        close: t.Callable[[], None],
+    ) -> None:
+        """Initialise reader.
+
+        Args:
+            make_iter: constructs iterator of response body chunks,
+                accepting chunk size
+            close: closes response connection
+        """
+
+        self.make_iter = make_iter
+        self.close = close
+        self._iter: t.Union[t.Iterator[bytes], None] = None
+
+    @classmethod
+    def from_response(cls, response: requests.Response) -> "_ResponseReader":
+        """Construct from response."""
+        return cls(response.iter_content, response.close)
+
+    def read(self, n: t.Union[int, None] = None) -> bytes:
+        """Read response body chunk.
+
+        Args:
+            n: chunk size
+
+        Returns:
+            response body chunk
+        """
+
+        if self._iter is None:
+            self._iter = self.make_iter(n)
+        try:
+            return next(self._iter)
+        except StopIteration:
+            return b""
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -403,6 +515,7 @@ class _IndexCache:
         "application/vnd.pypi.simple.v1+json, "
         "application/vnd.pypi.simple.v1+html;q=0.1"
     )}  # fmt: skip
+    _stats: _CacheStats
 
     def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
         self.index_url = index_url
@@ -414,6 +527,7 @@ class _IndexCache:
         self._index = {}
         self._packages = {}
         self._index_url_masked = _mask_password(index_url)
+        self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
@@ -421,7 +535,9 @@ class _IndexCache:
     def _list_packages(self):
         """List projects using or updating cache."""
         if self._index_t is not None and _now() < self._index_t + self.ttl:
+            self._stats.add_hit(key="<index>")
             return
+        self._stats.add_miss(key="<index>")
 
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = self.session.get(self.index_url, headers=self._headers, stream=True)
@@ -438,7 +554,9 @@ class _IndexCache:
             )
             return
 
-        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+        stream = _ResponseReader.from_response(response)
+
+        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
@@ -475,7 +593,9 @@ class _IndexCache:
         """List project files using or updating cache."""
         package = self._packages.get(package_name)
         if package and _now() < package.refreshed + self.ttl:
+            self._stats.add_hit(key=package_name)
             return
+        self._stats.add_miss(key=package_name)
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
@@ -508,7 +628,9 @@ class _IndexCache:
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
-        for _, child in lxml.etree.iterparse(response.raw, tag="a", html=True):
+        stream = _ResponseReader.from_response(response)
+
+        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
@@ -646,6 +768,8 @@ class _FileCache:
     _cache_dir_provided: t.Union[str, None]
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
     _evict_lock: threading.Lock
+    _stats: _CacheStats
+    _download_filename_suffix = ".proxpi-partial"
 
     def __init__(
         self,
@@ -671,6 +795,7 @@ class _FileCache:
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
+        self._stats = _CacheStats(name="Files")
 
         self._populate_files_from_existing_cache_dir()
 
@@ -690,6 +815,9 @@ class _FileCache:
         for dirpath, _, filenames in os.walk(self.cache_dir):
             for filename in filenames:
                 filepath = os.path.join(dirpath, filename)
+                if filename.endswith(self._download_filename_suffix):
+                    os.unlink(filepath)
+                    continue
                 size = os.path.getsize(filepath)
                 name = os.path.relpath(filepath, self.cache_dir)
                 if os.path != posixpath:
@@ -723,9 +851,11 @@ class _FileCache:
             return
         parent, _ = os.path.split(path)
         os.makedirs(parent, exist_ok=True)
-        with open(path, "wb") as f:
-            for chunk in response.iter_content(None):
+        download_path = path + self._download_filename_suffix
+        with open(download_path, mode="wb") as f:
+            for chunk in response.iter_content(chunk_size=16 * 1024):
                 f.write(chunk)
+        os.replace(download_path, path)
         key = self._get_key(url)
         self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
         logger.debug(f"Finished downloading '{url_masked}'")
@@ -740,12 +870,13 @@ class _FileCache:
 
         file = self._files.get(url)
         if isinstance(file, Thread):
+            url_masked = _mask_password(url)
+            logger.debug(f"Waiting for existing download of: {url_masked}")
             try:
                 file.join(self.download_timeout)
             except Exception as e:
                 if file.exc and file == self._files[url]:
                     self._files.pop(url, None)
-                url_masked = _mask_password(url)
                 logger.error(f"Failed to download '{url_masked}'", exc_info=e)
                 return True
             if isinstance(self._files[url], Thread):
@@ -758,7 +889,9 @@ class _FileCache:
             file = self._files[url]
             assert isinstance(file, _CachedFile)
             file.n_hits += 1
+            self._stats.add_hit(key=url)
             return file.path
+        self._stats.add_miss(key=url)
         return None
 
     def _start_downloading(self, url: str):
