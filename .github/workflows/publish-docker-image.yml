@@ -13,6 +13,9 @@ env:
 
 jobs:
   build-and-test:
+    permissions:
+      contents: read
+
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,6 +64,10 @@ jobs:
   build-and-publish:
     if: ${{ github.event_name == 'release' }}
     needs: ['build-and-test']
+
+    permissions:
+      contents: read
+
     runs-on: ubuntu-latest
 
     steps:
