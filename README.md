@@ -4,13 +4,17 @@ https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
+[![PyPI - Version](https://img.shields.io/pypi/v/proxpi?logo=pypi)](
+https://pypi.org/project/proxpi/)
 
-PyPI caching mirror
+PyPI caching proxy
 
 * Host a proxy PyPI mirror server with caching
   * Cache the index (project list and projects' file list)
   * Cache the project files
-* Support multiple indices
+* Proxy multiple package indices
+* Provide and consume both JSON and HTML
+  [APIs](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
 * Set index cache times-to-live (individually for each index)
 * Set files cache max-size on disk
 * Manually invalidate index cache
@@ -23,6 +27,10 @@ Choose between running inside [Docker](https://www.docker.com/) container if you
 run in a known-working environment, or outside via a Python app (instructions here are
 for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
 want more control over the environment.
+
+> **Note**: the index cache and the management of the file cache runs in memory, but is
+> not synchronised across multiple processes, so use multiple threads instead of
+> multiple processes. The cache is thread-safe.
 
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
@@ -45,7 +53,8 @@ docker compose up
 pip install proxpi
 ```
 
-Install `coloredlogs` as well to get coloured logging
+Install `proxpi[pretty]` instead to get coloured logging and tracebacks (disable by
+setting environment variable `NO_COLOR=1`).
 
 ##### Run server
 ```bash
@@ -93,9 +102,12 @@ change in a package index.
 * `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
   connect to the index server before `requests` raises a `ConnectTimeout` error
   to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
-* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data 
+* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data
   from the index server before `requests` raises a `ReadTimeout` error to prevent
   indefinite blocking, default: none, or 20 if connect-timeout provided
+* `PROXPI_LOGGING_LEVEL`: Python
+  [logging level](https://docs.python.org/3/library/logging.html#levels); default:
+  `INFO`
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
@@ -173,7 +185,7 @@ This is to be run on a server you have console access to.
        "PIP_INDEX_URL=http://proxpi:5000/index/",
        "PIP_TRUSTED_HOST=proxpi",
      ]
-   
+
    [[runners.docker]]
      network_mode = "gitlab-runner-network"
      ...
