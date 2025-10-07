@@ -22,7 +22,7 @@ on:
       - app.requirements.txt
       - Dockerfile
   release:
-    types: [published]
+    types: [created]
 
 env:
   REF_SLUG: ${{ contains(github.ref_name, '/') && github.sha || github.ref_name }}
