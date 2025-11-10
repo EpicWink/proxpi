@@ -4,9 +4,19 @@ on:
   pull_request:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
   push:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
     tags:
       - v*
 
@@ -18,7 +28,13 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version:
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - '3.14'
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -28,15 +44,12 @@ jobs:
         cache: pip
     - name: Update pip
       run: pip install -U pip
-    - name: Install package
-      run: pip install .
+    - name: Install package, and lint and test requirements
+      run: pip install --requirement ./tests/requirements.txt black pytest pytest-cov .
     - name: Lint with black
-      run: |
-        pip install black
-        black --check src/
+      run: black --check src/
     - name: Test with pytest
       run: |
-        pip install -r tests/requirements.txt
         pytest -vvra \
           --cov proxpi \
           --cov-report xml \
