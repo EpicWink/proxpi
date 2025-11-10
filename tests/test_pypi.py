@@ -1,5 +1,6 @@
 """Test ``proxpi`` server against real PyPI."""
 
+import sys
 import logging
 import subprocess
 
@@ -21,6 +22,8 @@ def server():
 def test_pip_download(server, tmp_path):
     """Test package installation."""
     args = [
+        sys.executable,
+        "-m",
         "pip",
         "--no-cache-dir",
         "download",
