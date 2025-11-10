@@ -212,6 +212,10 @@ Another option is to set up a proxy, but that's more effort than the above metho
 * [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
   packages, proxy to PyPI when not-found, supports package upload, no caching
 
+* [`dumb-pypi`](https://pypi.org/project/dumb-pypi/): generates a static website of a
+  package index pointing to statically-located files, no hosting (therefore no caching
+  nor proxying unless configured in server)
+
 * [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
   directory of packages, with redirecting/cached proxying to indexes, authentication and
   authorisation.
