@@ -60,6 +60,7 @@ jobs:
     - name: Run image test for ${{ matrix.platform.image-suffix }}
       run: tests/test-docker-image.sh
         "epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}"
+        "${{ matrix.platform.name }}"
 
   build-and-publish:
     if: ${{ github.event_name == 'release' }}
