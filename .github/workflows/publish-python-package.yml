@@ -44,12 +44,12 @@ jobs:
       with:
         cache: pip
         python-version: '3.x'
-    - name: Install package
-      run: pip install dist/*.whl
+    - name: Update pip
+      run: pip install -U pip
+    - name: Install package and test requirements
+      run: pip install --requirement ./tests/requirements.txt pytest dist/*.whl
     - name: Run unit-tests
-      run: |
-        pip install -r tests/requirements.txt
-        pytest -vvra
+      run: pytest -vvra
 
   release:
     runs-on: ubuntu-latest
