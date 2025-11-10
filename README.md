@@ -82,32 +82,21 @@ If you need to invalidate a locally cached file, restart the server: files shoul
 change in a package index.
 
 ### Environment variables
-* `PROXPI_INDEX_URL`: index URL, default: https://pypi.org/simple/
-* `PROXPI_INDEX_TTL`: index cache time-to-live in seconds,
-   default: 30 minutes. Disable index-cache by setting this to 0
-* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (comma-separated)
-* `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index cache times-to-live in seconds
-   (comma-separated), default: 3 minutes, cache disabled when 0
-* `PROXPI_CACHE_SIZE`: size of downloaded project files cache (bytes), default 5GB.
-  Disable files-cache by setting this to 0
-* `PROXPI_CACHE_DIR`: downloaded project files cache directory path, default: a new
-  temporary directory
-* `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
-  `"application/octet-stream"` instead of letting Flask guess it. This may be needed
-  if your package installer (eg Poetry) mishandles responses with declared encoding.
-* `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
-* `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
-  proxied index server for file downloads instead of waiting for the download,
-  default: 0.9
-* `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
-  connect to the index server before `requests` raises a `ConnectTimeout` error
-  to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
-* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data
-  from the index server before `requests` raises a `ReadTimeout` error to prevent
-  indefinite blocking, default: none, or 20 if connect-timeout provided
-* `PROXPI_LOGGING_LEVEL`: Python
-  [logging level](https://docs.python.org/3/library/logging.html#levels); default:
-  `INFO`
+
+| Name                                    | Default                                   | Description                                                                                                                                                                                              |
+|-----------------------------------------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `PROXPI_INDEX_URL`                      | https://pypi.org/simple/                  | index URL                                                                                                                                                                                                |
+| `PROXPI_INDEX_TTL`                      | *30 minutes*                              | index cache time-to-live in seconds. Disable index-cache by setting this to 0                                                                                                                            |
+| `PROXPI_EXTRA_INDEX_URLS`               |                                           | extra index URLs (comma-separated)                                                                                                                                                                       |
+| `PROXPI_EXTRA_INDEX_TTLS`               | *5 minutes for each index*                | corresponding extra index cache times-to-live in seconds (comma-separated), cache disabled when 0                                                                                                        |
+| `PROXPI_CACHE_SIZE`                     | *5GB*                                     | size of downloaded project files cache (bytes). Disable files-cache by setting this to 0                                                                                                                 |
+| `PROXPI_CACHE_DIR`                      | *a new temporary directory*               | downloaded project files cache directory path                                                                                                                                                            |
+| `PROXPI_BINARY_FILE_MIME_TYPE`          | false                                     | force file-response content-type to `"application/octet-stream"` instead of letting Flask guess it. This may be needed if your package installer (eg Poetry) mishandles responses with declared encoding |
+| `PROXPI_DISABLE_INDEX_SSL_VERIFICATION` | false                                     | don't verify any index SSL certificates                                                                                                                                                                  |
+| `PROXPI_DOWNLOAD_TIMEOUT`               | 0.9                                       | time (in seconds) before `proxpi` will redirect to the proxied index server for file downloads instead of waiting for the download                                                                       |
+| `PROXPI_CONNECT_TIMEOUT`                | *none, or 3.1 if read-timeout provided*   | time (in seconds) `proxpi` will wait for a socket to connect to the index server before `requests` raises a `ConnectTimeout` error to prevent indefinite blocking                                        |
+| `PROXPI_READ_TIMEOUT`                   | *none, or 20 if connect-timeout provided* | time (in seconds) `proxpi` will wait for chunks of data from the index server before `requests` raises a `ReadTimeout` error to prevent indefinite blocking                                              |
+| `PROXPI_LOGGING_LEVEL`                  | INFO                                      | Python [logging level](https://docs.python.org/3/library/logging.html#levels)                                                                                                                            |
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
