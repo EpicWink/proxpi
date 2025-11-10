@@ -2,13 +2,16 @@
 
 # Test Docker image
 #
-# Usage: test-docker-image.sh REPO/IMAGE:TAG
+# Usage: test-docker-image.sh REPO/IMAGE:TAG [PLATFORM]
 
 # Make command errors cause script to fail
 set -e
 
 cleanUp () {
+  echo "" 1>&2
+  echo "container logs:" 1>&2
   docker logs "$container"
+  echo "" 1>&2
 
   docker stop "$container"
   echo "stopped container" 1>&2
@@ -20,6 +23,7 @@ cleanUp () {
 # Start proxpi server
 container="$(docker create \
   --publish 5042:5000 \
+  ${2:+--platform "$2"} \
   "$1"
 )"
 echo "created container: $container" 1>&2
