@@ -1,7 +1,7 @@
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools >= 61.0",
+    "setuptools >= 61.0, < 81.0",
     "setuptools-scm[toml] >= 3.4",
 ]
 
@@ -22,7 +22,7 @@ classifiers = [
 dependencies = [
     "flask >= 2.0, < 4.0",
     "jinja2 ~= 3.0",
-    "lxml >= 4.8, < 6.0",
+    "lxml >= 4.8, < 7.0",
     "requests ~= 2.27",
 ]
 description = "PyPI caching mirror"
