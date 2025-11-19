@@ -59,6 +59,8 @@ jobs:
     - name: Build ${{ matrix.platform.image-suffix }} for testing
       uses: docker/build-push-action@v6
       with:
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         context: .
         load: true
         tags: epicwink/proxpi:${{ env.REF_SLUG }}-${{ matrix.platform.image-suffix }}
@@ -111,6 +113,7 @@ jobs:
     - name: Build and push image for all architectures
       uses: docker/build-push-action@v6
       with:
+        cache-from: type=gha
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
