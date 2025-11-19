@@ -1,4 +1,4 @@
-FROM python:3.12-alpine AS build
+FROM python:3.14-alpine AS build
 
 RUN \
     --mount=type=cache,target=/root/.cache/pip \
@@ -10,7 +10,7 @@ RUN \
  && python -m build --outdir /srv/proxpi/dist /root/src/proxpi \
  && ls /srv/proxpi/dist
 
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 
 RUN \
     --mount=type=cache,target=/root/.cache/pip \
