@@ -11,11 +11,15 @@ import warnings
 import functools
 import posixpath
 import threading
+import queue
 import dataclasses
 import typing as t
 import urllib.parse
 
+
 import requests
+from requests.exceptions import RequestException
+from urllib3.util import SKIP_HEADER
 import lxml.etree
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
@@ -40,7 +44,6 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
-DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 CONNECT_TIMEOUT = (
     float(os.environ["PROXPI_CONNECT_TIMEOUT"])
@@ -50,8 +53,10 @@ CONNECT_TIMEOUT = (
 READ_TIMEOUT = (
     float(os.environ["PROXPI_READ_TIMEOUT"])
     if os.environ.get("PROXPI_READ_TIMEOUT")
-    else None
+    else 20.0
 )
+
+CHUNK_SIZE: t.Final[int] = 16 * 1024
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -287,6 +292,199 @@ class NotFound(ValueError):
     """Package or file not found."""
 
     pass
+
+
+@dataclasses.dataclass
+class Subscriber:
+    """Individual subscriber to a download request."""
+
+    id: int
+    notify_queue: queue.Queue[int | RequestException]
+    download_path: str
+    read_position: int = 0
+
+    @staticmethod
+    def _read_to(f, start, end) -> int:
+        """Yield chunks from start to end.
+
+        If end=-1, use file size as the end
+
+        Returns:
+            position after read
+        """
+
+        if end == -1:
+            end = f.seek(0, os.SEEK_END)
+
+        while True:
+            bytes_to_read = min(
+                end - start,
+                CHUNK_SIZE,
+            )
+            if bytes_to_read <= 0:  # No new data available atm
+                break
+            f.seek(start)
+            chunk = f.read(bytes_to_read)
+            assert chunk, "should have data chunk if bytes_to_read!=0"
+            yield chunk
+            start += len(chunk)
+        return start
+
+    def generate(self):
+        """Stream generator for flask streaming."""
+
+        with open(self.download_path, "rb", 0) as f:
+            while True:
+                # Wait on notification of new data
+                try:
+                    i = self.notify_queue.get(timeout=READ_TIMEOUT)
+                    if isinstance(i, RequestException):  # raise and exit control flow
+                        raise i
+
+                    write_position = i
+                    # Read all data available
+                    self.read_position = yield from self._read_to(
+                        f, self.read_position, write_position
+                    )
+                    if write_position == -1:  # receives EOF
+                        break
+                except queue.Empty:
+                    raise TimeoutError(f"subscriber timeout on {self.download_path}")
+
+
+@dataclasses.dataclass
+class DownloadStatus:
+    """
+    Download state tracker.
+
+    Also act as publisher (and do file-write).
+    """
+
+    _temp_download_path: str = ""
+    _upstream_status_code: int = 0
+    _upstream_headers: t.Tuple[str, str] = dataclasses.field(default_factory=tuple)
+    _subscribers: t.Dict[int, Subscriber] = dataclasses.field(default_factory=dict)
+    _subscriber_counter: int = 0
+    _write_position: int = 0
+    _write_handle: File = None
+    _pub_eof: bool = False
+    # cleanup callback
+    _cleanup: t.Callable = lambda: 0
+    _thread: threading.Thread = None
+
+    def _can_cleanup(self):
+        """Check if pub AND all subs finish."""
+        return (
+            self._pub_eof
+            and len(self._subscribers) == 0
+            and os.path.exists(self._temp_download_path)
+        )
+
+    def _notify_all(self, data: int | RequestException):
+        for subscriber in self._subscribers.values():
+            try:
+                subscriber.notify_queue.put_nowait(data)
+            except queue.Full:
+                pass
+
+    @property
+    def status_code(self) -> int:
+        """Upstream status code"""
+        return self._upstream_status_code
+
+    @property
+    def headers(self) -> t.List[t.Tuple[str, str]]:
+        """Reverse proxy stripped headers"""
+        # https://www.rfc-editor.org/rfc/rfc2616#section-13.5.1
+        excluded_headers = [
+            "connection",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailers",
+            "transfer-encoding",
+            "upgrade",
+        ]
+        return [
+            (name, value)
+            for (name, value) in self._upstream_headers
+            if name.lower() not in excluded_headers
+        ]
+
+    @property
+    def ready(self) -> bool:
+        """Whether sub is ready to receive"""
+        return (
+            os.path.exists(self._temp_download_path)
+            and os.path.getsize(self._temp_download_path) > 0
+        )
+
+    def is_alive(self) -> bool:
+        return (
+            (self._thread and self._thread.is_alive())  # Fetch thread is still alive
+            or len(self._subscribers)
+            != 0  # Or fetch is done, but subs still downloading
+        )
+
+    def add_subscriber(self) -> Subscriber:
+        # Wait until content is ready
+        while not self.ready:
+            continue
+
+        subscriber_id = self._subscriber_counter
+        self._subscriber_counter += 1
+        subscriber = Subscriber(subscriber_id, queue.Queue(), self._temp_download_path)
+        self._subscribers[subscriber_id] = subscriber
+
+        return subscriber
+
+    def remove_subscriber(self, subscriber: Subscriber):
+        self._subscribers.pop(subscriber.id)
+        logger.debug(f"now have {len(self._subscribers)} subs")
+        if self._can_cleanup():
+            logger.debug("cleanup on no subs")
+            self._cleanup()
+
+    def set_cleanup_callback(self, cleanup_func: t.Callable):
+        self._cleanup = cleanup_func
+
+    def broadcast_chunk(self, chunk: bytes):
+        """Write and broadcast current position to all subscribers known."""
+        if self._write_handle is None:
+            self._write_handle = open(self._temp_download_path, "ab", 0)
+        self._write_handle.write(chunk)
+        self._write_position += len(chunk)
+        self._notify_all(self._write_position)
+
+    def broadcast_eof(self):
+        """Broadcast EOF to all subscribers known."""
+        if self._write_handle:
+            self._write_handle.close()
+        self._pub_eof = True
+        self._notify_all(-1)
+        # If all users cancel, there will be no sub left
+        # but server still fetches and we do normal cleanup
+        if self._can_cleanup():
+            logger.debug("cleanup on broadcast_eof")
+            self._cleanup()
+
+    def broadcast_exception(self, error: RequestException):
+        """Broadcast an exception to all subscribers."""
+        if self._write_handle:
+            self._write_handle.close()
+        self._pub_eof = True
+        self._notify_all(error)
+
+
+class Downloading(Exception):
+    """Internal exception to pass DownloadStatus"""
+
+    status: DownloadStatus = None
+
+    def __init__(self, status):
+        super().__init__("Downloading exception")
+        self.status = status
 
 
 class Thread(threading.Thread):
@@ -725,8 +923,9 @@ class _FileCache:
     max_size: int
     cache_dir: str
     _cache_dir_provided: t.Union[str, None]
-    _files: t.Dict[str, t.Union[_CachedFile, Thread]]
+    _files: t.Dict[str, t.Union[_CachedFile, DownloadStatus]]
     _evict_lock: threading.Lock
+    _init_download_lock: threading.Lock
     _stats: _CacheStats
     _download_filename_suffix = ".proxpi-partial"
 
@@ -734,7 +933,6 @@ class _FileCache:
         self,
         max_size: int,
         cache_dir: str = None,
-        download_timeout: float = 0.9,
         session: requests.Session = None,
     ):
         """Initialise file-cache.
@@ -749,11 +947,11 @@ class _FileCache:
 
         self.max_size = max_size
         self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
-        self.download_timeout = download_timeout
         self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
         self._files = {}
         self._evict_lock = threading.Lock()
+        self._download_init_lock = threading.Lock()
         self._stats = _CacheStats(name="Files")
 
         self._populate_files_from_existing_cache_dir()
@@ -791,62 +989,73 @@ class _FileCache:
         parent = _hostname_normalise_pattern.sub("-", urlsplit.hostname)
         return posixpath.join(parent, *_split_path(urlsplit.path, posixpath.split))
 
-    def _download_file(self, url: str, path: str):
+    def _download_file(self, url: str, path: str, status: DownloadStatus):
         """Download a file.
+
+        NOTE:
+            RequestExceptions will be delegated under
+            DownloadStatus->Subscriber->Generator
+            This function normally WON'T raise.
 
         Args:
             url: URL of file to download
             path: local path to download to
         """
-
         url_masked = _mask_password(url)
         logger.debug(f"Downloading '{url_masked}' to '{path}'")
-        response = self.session.get(url, stream=True)
-        if response.status_code // 100 >= 4:
-            logger.error(
-                f"Failed to download '{url_masked}': "
-                f"status={response.status_code}, body={response.text}"
-            )
-            return
+
+        # Set temp download path in the status object
+        status._temp_download_path = path + self._download_filename_suffix
         parent, _ = os.path.split(path)
         os.makedirs(parent, exist_ok=True)
-        download_path = path + self._download_filename_suffix
-        with open(download_path, mode="wb") as f:
-            for chunk in response.iter_content(chunk_size=16 * 1024):
-                f.write(chunk)
-        os.replace(download_path, path)
-        key = self._get_key(url)
-        self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
-        logger.debug(f"Finished downloading '{url_masked}'")
+        # truncate to zero (or create if not exist)
+        open(status._temp_download_path, "wb").close()
 
-    def _wait_for_existing_download(self, url: str) -> bool:
-        """Wait for existing download, if any.
+        try:
+            response = self.session.get(url, stream=True)
+            status._upstream_status_code = response.status_code
+            status._upstream_headers = response.raw.headers.items()
+            if status.status_code // 100 >= 4:
+                raise RequestException(
+                    f"Failed to fetch '{url_masked}': "
+                    f"status={response.status_code}, body={response.text}"
+                )
+            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                # Broadcast chunk to all subscribers
+                status.broadcast_chunk(chunk)
 
-        Returns:
-            whether the wait is given up (ie if time-out was reached or
-                exception was encountered)
-        """
+        except RequestException as e:
+            logger.error(f"{e.__class__.__name__} when fetching: {e}")
 
-        file = self._files.get(url)
-        if isinstance(file, Thread):
-            url_masked = _mask_password(url)
-            logger.debug(f"Waiting for existing download of: {url_masked}")
-            try:
-                file.join(self.download_timeout)
-            except Exception as e:
-                if file.exc and file == self._files[url]:
-                    self._files.pop(url, None)
-                logger.error(f"Failed to download '{url_masked}'", exc_info=e)
-                return True
-            if isinstance(self._files[url], Thread):
-                return True  # default to original URL (due to timeout or HTTP error)
-        return False
+            def cleanup():
+                os.unlink(status._temp_download_path)
+                # Remove entry
+                key = self._get_key(url)
+                if key in self._files:
+                    del self._files[key]
+
+            status.set_cleanup_callback(cleanup)
+            status.broadcast_exception(e)
+            return
+
+        def cleanup():
+            os.replace(status._temp_download_path, path)
+            key = self._get_key(url)
+            # Mark the file as cached
+            self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
+            logger.debug(f"All subs finished downloading '{url_masked}'")
+
+        status.set_cleanup_callback(cleanup)
+        status.broadcast_eof()
+        logger.debug(f"Finished fetching '{url_masked}'")
 
     def _get_cached(self, url: str) -> t.Union[str, None]:
         """Get file from cache."""
         if url in self._files:
             file = self._files[url]
-            assert isinstance(file, _CachedFile)
+            if file and not isinstance(file, _CachedFile):
+                # still downloading
+                return None
             file.n_hits += 1
             self._stats.add_hit(key=url)
             return file.path
@@ -858,9 +1067,13 @@ class _FileCache:
         key = self._get_key(url)
         path = os.path.join(self.cache_dir, *_split_path(key, posixpath.split))
 
-        thread = Thread(target=self._download_file, args=(url, path))
-        self._files[key] = thread
-        thread.start()
+        status = DownloadStatus()
+        status._thread = Thread(target=self._download_file, args=(url, path, status))
+        # Store DownloadStatus to track if download is still running
+        self._files[key] = status
+        status._thread.start()
+        self._download_init_lock.release()
+        raise Downloading(status)
 
     def _evict_lfu(self, url: str):
         """Evict least-frequently-used files until under max cache size."""
@@ -889,16 +1102,32 @@ class _FileCache:
         if self.max_size == 0:
             return url
         key = self._get_key(url)
-        path = url
-        given_up = self._wait_for_existing_download(key)
-        if not given_up:
-            path = self._get_cached(key)
-            if not path:
-                self._start_downloading(url)
-                with self._evict_lock:
-                    self._evict_lfu(url)
-                path = self.get(url)
-        return path
+
+        # First, check if file is already cached
+        path = self._get_cached(key)
+        if path:
+            return path
+
+        self._download_init_lock.acquire()
+        # Now check if still downloading
+        file = self._files.get(key)
+
+        # There's an ongoing download - get the status to allow subscription
+        if isinstance(file, DownloadStatus):
+            assert file.is_alive(), "should have an alive Downloading thread"
+            self._download_init_lock.release()
+            # Raise Downloading exception to signal server
+            # to use the ongoing download stream
+            raise Downloading(file)
+            return url  # unreachable
+        # No downloading thread found,
+        # evict and start a new download
+        else:
+            with self._evict_lock:
+                self._evict_lfu(url)
+            # NOTE: lock would be released inside _start_downloading()
+            self._start_downloading(url)
+            return url  # unreachable
 
 
 @dataclasses.dataclass
@@ -933,10 +1162,12 @@ class Cache:
         elif READ_TIMEOUT:
             session.default_timeout = (3.1, READ_TIMEOUT)
 
+        # Accept no compression here,
+        # as our proxy needs a correct Content-Length
+        session.headers["Accept-Encoding"] = SKIP_HEADER
+
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
-        file_cache = cls._file_cache_cls(
-            CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
-        )
+        file_cache = cls._file_cache_cls(CACHE_SIZE, CACHE_DIR, session)
         if len(EXTRA_INDEX_URLS) != len(EXTRA_INDEX_TTLS):
             raise RuntimeError(
                 f"Number of extra index URLs doesn't equal number of extra index "
@@ -1022,6 +1253,8 @@ class Cache:
         Raises:
             NotFound: if project doesn't exist in any index or file doesn't
                 exist in project
+            Downloading: if there's already a thread fetching so that
+                we can reuse the DownloadStatus
         """
 
         try:
