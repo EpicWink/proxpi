@@ -55,6 +55,7 @@ READ_TIMEOUT = (
     if os.environ.get("PROXPI_READ_TIMEOUT")
     else 20.0
 )
+POOL_SIZE = int(os.environ.get("PROXPI_POOL_SIZE", 100))
 
 CHUNK_SIZE: t.Final[int] = 16 * 1024
 
@@ -1151,6 +1152,11 @@ class Cache:
         """Create cache from configuration."""
         session = Session()
         session.verify = not DISABLE_INDEX_SSL_VERIFICATION
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=POOL_SIZE, pool_maxsize=POOL_SIZE
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
         proxpi_version = get_proxpi_version()
         if proxpi_version:
             session.headers["User-Agent"] = f"proxpi/{proxpi_version}"
