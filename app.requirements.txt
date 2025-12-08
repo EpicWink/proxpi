@@ -14,7 +14,7 @@
 #
 # pip_version: 25.3
 #
-# command: pip install gunicorn '.[pretty]'
+# command: pip install --only-binary :all: --python-version 3.14 --implementation cp gunicorn '.[pretty]' --platform musllinux_1_2_aarch64 --platform musllinux_1_2_x86_64
 
 blinker==1.9.0 \
     --hash=sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc
@@ -23,6 +23,7 @@ certifi==2025.11.12 \
     --hash=sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b
     # via requests
 charset-normalizer==3.4.4 \
+    --hash=sha256:c8ae8a0f02f57a6e61203a31428fa1d677cbe50c93622b4149d5c0f319c1d19e \
     --hash=sha256:99ae2cffebb06e6c22bdc25801d7b30f503cc87dbd283479e7b606f70aff57ec
     # via requests
 click==8.3.1 \
@@ -54,9 +55,11 @@ jinja2==3.1.6 \
     #   flask
     #   proxpi (setup.py)
 lxml==6.0.2 \
+    --hash=sha256:9261bb77c2dab42f3ecd9103951aeca2c40277701eb7e912c545c1b16e0e4917 \
     --hash=sha256:945da35a48d193d27c188037a05fec5492937f66fb1958c24fc761fb9d40d43c
     # via proxpi (setup.py)
 markupsafe==3.0.3 \
+    --hash=sha256:ec15a59cf5af7be74194f7ab02d0f59a62bdcf1a537677ce67a2537c9b87fcda \
     --hash=sha256:2713baf880df847f2bece4230d4d094280f4e67b1e813eec43b4c0e144a34ffe
     # via
     #   flask
