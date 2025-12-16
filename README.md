@@ -93,8 +93,7 @@ change in a package index.
 * `PROXPI_CACHE_DIR`: downloaded project files cache directory path, default: a new
   temporary directory
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
-  `"application/octet-stream"` instead of letting Flask guess it. This may be needed
-  if your package installer (eg Poetry) mishandles responses with declared encoding.
+  `"application/octet-stream"` instead of letting Flask guess it
 * `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,

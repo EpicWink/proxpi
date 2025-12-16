@@ -444,6 +444,6 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
         assert response.headers["Content-Type"] == "application/octet-stream"
         assert not response.headers.get("Content-Encoding")
     else:
-        assert response.headers["Content-Type"] == "application/x-tar"
-        assert response.headers["Content-Encoding"] == "gzip"
+        assert response.headers["Content-Type"] == "application/x-tar+gzip"
+        assert not response.headers.get("Content-Encoding")
     response.close()
