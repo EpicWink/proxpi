@@ -6,10 +6,10 @@ import abc
 import time
 import shutil
 import logging
+import pathlib
 import tempfile
 import warnings
 import functools
-import posixpath
 import threading
 import dataclasses
 import typing as t
@@ -688,7 +688,7 @@ class _CachedFile:
 
     __slots__ = ("path", "size", "n_hits")
 
-    path: str
+    path: pathlib.Path
     """File path."""
 
     size: int
@@ -698,32 +698,11 @@ class _CachedFile:
     """Number of cache hits."""
 
 
-def _split_path(
-    path: str, split: t.Callable[[str], t.Tuple[str, str]]
-) -> t.Generator[str, None, None]:
-    """Split path into directory components.
-
-    Args:
-        path: path to split
-        split: path-split functions
-
-    Returns:
-        path parts generator
-    """
-
-    parent, filename = split(path)
-    if not filename:
-        return
-    if parent:
-        yield from _split_path(parent, split)
-    yield filename
-
-
 class _FileCache:
     """Package files cache."""
 
     max_size: int
-    cache_dir: str
+    cache_dir: pathlib.Path
     _cache_dir_provided: t.Union[str, None]
     _files: t.Dict[str, t.Union[_CachedFile, Thread]]
     _evict_lock: threading.Lock
@@ -733,7 +712,7 @@ class _FileCache:
     def __init__(
         self,
         max_size: int,
-        cache_dir: str = None,
+        cache_dir: t.Union[str, pathlib.Path] = None,
         download_timeout: float = 0.9,
         session: requests.Session = None,
     ):
@@ -748,7 +727,7 @@ class _FileCache:
         """
 
         self.max_size = max_size
-        self.cache_dir = os.path.abspath(cache_dir or tempfile.mkdtemp())
+        self.cache_dir = pathlib.Path(cache_dir or tempfile.mkdtemp()).absolute()
         self.download_timeout = download_timeout
         self.session = session or requests.Session()
         self._cache_dir_provided = cache_dir
@@ -765,22 +744,19 @@ class _FileCache:
         )
 
     def __del__(self):
-        if not self._cache_dir_provided and os.path.isdir(self.cache_dir):
+        if not self._cache_dir_provided and self.cache_dir.is_dir():
             logger.debug(f"Deleting '{self.cache_dir}'")
-            shutil.rmtree(self.cache_dir)
+            shutil.rmtree(str(self.cache_dir))
 
     def _populate_files_from_existing_cache_dir(self):
         """Populate from user-provided cache directory."""
-        for dirpath, _, filenames in os.walk(self.cache_dir):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                if filename.endswith(self._download_filename_suffix):
-                    os.unlink(filepath)
-                    continue
-                size = os.path.getsize(filepath)
-                name = os.path.relpath(filepath, self.cache_dir)
-                if os.path != posixpath:
-                    name = posixpath.join(*_split_path(name, os.path.split))
+        for filepath in self.cache_dir.glob("**/*"):
+            if filepath.name.endswith(self._download_filename_suffix):
+                os.unlink(filepath)
+                continue
+            size = filepath.stat().st_size
+            name = str(pathlib.PurePosixPath(filepath.relative_to(self.cache_dir)))
+            if True:  # minimise Git diff
                 self._files[name] = _CachedFile(filepath, size, n_hits=0)
 
     @staticmethod
@@ -789,9 +765,9 @@ class _FileCache:
         """Get file cache reference key from file URL."""
         urlsplit = urllib.parse.urlsplit(url)
         parent = _hostname_normalise_pattern.sub("-", urlsplit.hostname)
-        return posixpath.join(parent, *_split_path(urlsplit.path, posixpath.split))
+        return str(pathlib.PurePosixPath(parent) / urlsplit.path[1:])
 
-    def _download_file(self, url: str, path: str):
+    def _download_file(self, url: str, path: pathlib.Path) -> None:
         """Download a file.
 
         Args:
@@ -808,15 +784,14 @@ class _FileCache:
                 f"status={response.status_code}, body={response.text}"
             )
             return
-        parent, _ = os.path.split(path)
-        os.makedirs(parent, exist_ok=True)
-        download_path = path + self._download_filename_suffix
-        with open(download_path, mode="wb") as f:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        download_path = path.with_name(path.name + self._download_filename_suffix)
+        with open(str(download_path), "wb") as f:
             for chunk in response.iter_content(chunk_size=16 * 1024):
                 f.write(chunk)
         os.replace(download_path, path)
         key = self._get_key(url)
-        self._files[key] = _CachedFile(path, os.stat(path).st_size, 0)
+        self._files[key] = _CachedFile(path, path.stat().st_size, 0)
         logger.debug(f"Finished downloading '{url_masked}'")
 
     def _wait_for_existing_download(self, url: str) -> bool:
@@ -842,21 +817,21 @@ class _FileCache:
                 return True  # default to original URL (due to timeout or HTTP error)
         return False
 
-    def _get_cached(self, url: str) -> t.Union[str, None]:
+    def _get_cached(self, url: str) -> t.Union[pathlib.Path, None]:
         """Get file from cache."""
         if url in self._files:
             file = self._files[url]
             assert isinstance(file, _CachedFile)
             file.n_hits += 1
             self._stats.add_hit(key=url)
-            return file.path
+            return pathlib.Path(file.path)
         self._stats.add_miss(key=url)
         return None
 
     def _start_downloading(self, url: str):
         """Start downloading a file."""
         key = self._get_key(url)
-        path = os.path.join(self.cache_dir, *_split_path(key, posixpath.split))
+        path = pathlib.Path(pathlib.PurePosixPath(self.cache_dir) / key)
 
         thread = Thread(target=self._download_file, args=(url, path))
         self._files[key] = thread
@@ -873,10 +848,10 @@ class _FileCache:
         while existing_size + file_size > self.max_size and existing_size > 0:
             existing_url = cache_keys.pop(0)
             file = self._files.pop(existing_url)
-            os.unlink(file.path)
+            file.path.unlink()
             existing_size -= file.size
 
-    def get(self, url: str) -> str:
+    def get(self, url: str) -> t.Union[str, pathlib.Path]:
         """Get a file using or updating cache.
 
         Args:
@@ -1009,7 +984,7 @@ class Cache:
             raise exc
         return files
 
-    def get_file(self, package_name: str, file_name: str) -> str:
+    def get_file(self, package_name: str, file_name: str) -> t.Union[str, pathlib.Path]:
         """Get a file.
 
         Args:
