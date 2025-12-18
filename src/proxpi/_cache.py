@@ -507,7 +507,7 @@ class _IndexCache:
         response.raise_for_status()
         self._index_t = _now()
 
-        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+        if response.headers.get("Content-Type") == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
@@ -578,7 +578,7 @@ class _IndexCache:
 
         package = Package(package_name, files={}, refreshed=_now())
 
-        if response.headers["Content-Type"] == "application/vnd.pypi.simple.v1+json":
+        if response.headers.get("Content-Type") == "application/vnd.pypi.simple.v1+json":
             response_data = response.json()
             for file_data in response_data["files"]:
                 file = FileFromJSON.from_json_response(file_data, response.request.url)
