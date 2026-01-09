@@ -11,6 +11,8 @@ import flask
 import jinja2
 import werkzeug.exceptions
 
+from requests.exceptions import RequestException
+
 from . import _cache
 
 try:
@@ -211,6 +213,33 @@ def get_file(package_name: str, file_name: str):
     except _cache.NotFound:
         flask.abort(404)
         raise
+    except _cache.Downloading as e:
+        status = e.status
+        subscriber = status.add_subscriber()
+
+        def stream():
+            try:
+                yield from subscriber.generate()
+            except GeneratorExit:
+                logger.info("User cancelled request")
+                pass
+            except (
+                RequestException or TimeoutError
+            ) as e:  # can't edit status code now, give a hint in stream
+                logger.error(f"{e.__class__.__name__} on stream: {e}")
+                yield f"***[proxpi] server fetch request failed: {e}***".encode()
+                return
+            finally:
+                status.remove_subscriber(subscriber)
+
+        response = flask.Response(
+            stream(),
+            status.status_code,
+            status.headers,
+            direct_passthrough=True,
+        )
+        return response
+
     scheme = urllib.parse.urlparse(path).scheme
     if scheme and scheme != "file":
         return flask.redirect(path)
