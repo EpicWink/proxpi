@@ -37,12 +37,12 @@ jobs:
     permissions:
       contents: read
     steps:
+    - uses: actions/checkout@v6
     - name: Download package
       uses: actions/download-artifact@v7
       with:
         name: packages
         path: dist/
-    - uses: actions/checkout@v6
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
