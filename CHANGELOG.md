@@ -14,6 +14,10 @@
 
 * Configure logging level with `PROXPI_LOGGING_LEVEL`
 
+### Fixes
+
+* Support package index HTML responses with no `content-type` header
+
 ### Improvements
 
 * Colour tracebacks if `colored-traceback` is installed (disable with `NO_COLOR=1`)

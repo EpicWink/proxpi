@@ -1,13 +1,13 @@
 """Test ``proxpi`` server."""
 
 import os
+import enum
 import hashlib
 import logging
 import pathlib
 import warnings
 import posixpath
 import contextlib
-import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
 
@@ -24,19 +24,27 @@ proxpi_server = proxpi.server
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
-mock_index_response_is_json = False
+
+class _ResponseType(enum.Enum):
+    html = enum.auto()
+    html_without_type = enum.auto()
+    json = enum.auto()
+    json_yanked = enum.auto()
+
+
+current_mock_index_response_type = _ResponseType.html
 
 
 @contextlib.contextmanager
-def set_mock_index_response_is_json(value: t.Union[bool, str]):
-    global mock_index_response_is_json
+def set_mock_index_response_is_json(value: _ResponseType):
+    global current_mock_index_response_type
 
-    original_mock_index_response_is_json = mock_index_response_is_json
-    mock_index_response_is_json = value
+    original = current_mock_index_response_type
+    current_mock_index_response_type = value
     try:
         yield
     finally:
-        mock_index_response_is_json = original_mock_index_response_is_json
+        current_mock_index_response_type = original
 
 
 def make_mock_index_app(index_name: str) -> flask.Flask:
@@ -54,34 +62,53 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
 
     @app.route("/")
     def list_projects() -> flask.Response:
-        if mock_index_response_is_json:
+        if current_mock_index_response_type in (
+            _ResponseType.json,
+            _ResponseType.json_yanked,
+        ):
             file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
+            assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
             mime_type = "text/html"
 
-        return flask.send_from_directory(
+        response = flask.send_from_directory(
             directory=indexes_dir_relative_path,
             path=pathlib.PurePath(index_name) / file_name,
             mimetype=mime_type,
         )
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
 
     @app.route("/<name>/")
     def get_project(name: str) -> flask.Response:
-        if mock_index_response_is_json:
-            stem = "yanked" if mock_index_response_is_json == "yanked" else "index"
-            file_name = f"{stem}.json"
+        if current_mock_index_response_type == _ResponseType.json:
+            file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.json_yanked:
+            file_name = "yanked.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
+            assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
             mime_type = "text/html"
 
-        return flask.send_from_directory(
+        response = flask.send_from_directory(
             directory=indexes_dir_relative_path,
             path=pathlib.PurePath(index_name) / name / file_name,
             mimetype=mime_type,
         )
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
 
     @app.route("/<project_name>/<file_name>")
     def get_file(project_name: str, file_name: str) -> flask.Response:
@@ -137,7 +164,10 @@ def clear_projects_cache(server):
 
 
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
-@pytest.mark.parametrize("index_json_response", [False, True])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
+)
 def test_list(server, accept, index_json_response, clear_index_cache):
     """Test getting package list."""
     with set_mock_index_response_is_json(index_json_response):
@@ -167,7 +197,10 @@ def test_list(server, accept, index_json_response, clear_index_cache):
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
-@pytest.mark.parametrize("index_json_response", [False, True])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
+)
 def test_list_json(
     server, accept, index_json_response, mock_root_index, clear_index_cache
 ):
@@ -189,7 +222,12 @@ def test_list_json(
 @pytest.mark.parametrize("accept", [
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
+@pytest.mark.parametrize("index_json_response", [
+    _ResponseType.html,
+    _ResponseType.html_without_type,
+    _ResponseType.json,
+    _ResponseType.json_yanked,
+])  # fmt: skip
 def test_package(server, project, accept, index_json_response, clear_projects_cache):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
@@ -288,7 +326,10 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("query_format", [False, True])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.json, _ResponseType.json_yanked],
+)
 def test_package_json(
     server, project, accept, query_format, index_json_response, clear_projects_cache
 ):
