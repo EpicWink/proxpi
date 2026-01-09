@@ -106,7 +106,6 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
             path=pathlib.PurePath(index_name) / name / file_name,
             mimetype=mime_type,
         )
-        assert current_mock_index_response_type == _ResponseType.html_without_type
         if current_mock_index_response_type == _ResponseType.html_without_type:
             del response.headers["Content-Type"]
         return response
