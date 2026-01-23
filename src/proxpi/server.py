@@ -1,8 +1,8 @@
 """Cached package index server."""
 
 import os
-import http
 import gzip
+import http
 import zlib
 import typing as t
 import logging
@@ -10,11 +10,10 @@ import urllib.parse
 
 import jinja2
 import fastapi.responses
-import fastapi.templating
 import fastapi.exceptions
+import fastapi.templating
 
-from . import _cache
-from . import _server_utils
+from . import _cache, _server_utils
 
 try:
     import importlib_resources  # prefer PyPI version (for Python < 3.9)
@@ -262,10 +261,7 @@ def get_file(package_name: str, file_name: str) -> fastapi.Response:
         )
 
     response = fastapi.responses.FileResponse(path, media_type=_file_mime_type)
-    if (
-        path.endswith(".tar.gz")
-        and response.media_type == "application/x-tar"
-    ):
+    if path.endswith(".tar.gz") and response.media_type == "application/x-tar":
         response.media_type = "application/x-tar+gzip"  # keep consistent
         response.headers["Content-Type"] = "application/x-tar+gzip"
     return response

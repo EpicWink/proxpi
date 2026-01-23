@@ -66,14 +66,11 @@ def parse_accept_header(
 
         # Find quality
         for ah_type, ah_subtype, ah_parameters, quality in qualities:
-            if (
-                (ah_type == "*" and ah_subtype == "*")
-                or (
-                    maintype == ah_type
-                    and (
-                        ah_subtype == "*"
-                        or (subtype == ah_subtype and parameters == ah_parameters)
-                    )
+            if (ah_type == "*" and ah_subtype == "*") or (
+                maintype == ah_type
+                and (
+                    ah_subtype == "*"
+                    or (subtype == ah_subtype and parameters == ah_parameters)
                 )
             ):
                 return quality
