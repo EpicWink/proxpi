@@ -1,13 +1,18 @@
 """Testing utilities."""
 
+import socket
 import typing as t
+import asyncio
+import logging
 import threading
 import html.parser
 
-import werkzeug.serving
+import hypercorn.utils
+import hypercorn.config
+import hypercorn.asyncio.run
 
 if t.TYPE_CHECKING:
-    import flask
+    import hypercorn.typing
 
 
 class IndexParser(html.parser.HTMLParser):
@@ -67,12 +72,39 @@ class Thread(threading.Thread):
             self.exc = e
 
 
-def make_server(app: "flask.Flask") -> t.Generator[str, None, None]:
-    server = werkzeug.serving.make_server(host="localhost", port=0, app=app)
-    thread = Thread(target=server.serve_forever, args=(0.05,))
+def make_server(app: "hypercorn.typing.Framework") -> t.Generator[str, None, None]:
+    async def serve():
+        nonlocal shutdown_future
+        shutdown_future = asyncio.Future()  # create in same asyncio loop
+
+        # Can't use `hypercorn.asyncio.serve` as it creates the socket internally, so
+        # we never know the randomly-assigned port
+        await hypercorn.asyncio.run.worker_serve(
+            app=hypercorn.utils.wrap_app(
+                app, hypercorn.Config.wsgi_max_body_size, mode=None
+            ),
+            config=hypercorn.Config.from_mapping({
+                "loglevel": "DEBUG",
+                "bind": [],
+                "insecure_bind": [f"localhost:{port}"],
+                "errorlog": logging.getLogger("hypercorn.error"),
+            }),
+            sockets=hypercorn_sockets,
+            shutdown_trigger=lambda: shutdown_future,
+        )  # fmt: skip
+
+    sock = socket.socket()
+    sock.bind(("localhost", 0))
+    port = sock.getsockname()[1]
+    hypercorn_sockets = hypercorn.config.Sockets(
+        secure_sockets=[], insecure_sockets=[sock], quic_sockets=[]
+    )
+
+    shutdown_future = None  # type: t.Union[asyncio.Future, None]
+    thread = Thread(target=asyncio.run, args=(serve(),))
     thread.start()
-    yield f"http://localhost:{server.port}"
-    server.shutdown()
+    yield f"http://localhost:{port}"
+    shutdown_future.set_result(None)
     thread.join(timeout=0.1)
     if thread.exc:
         raise thread.exc
