@@ -3,8 +3,8 @@
 import os
 import gzip
 import zlib
-import logging
 import typing as t
+import logging
 import urllib.parse
 
 import flask

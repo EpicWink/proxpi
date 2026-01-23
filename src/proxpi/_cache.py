@@ -5,6 +5,7 @@ import re
 import abc
 import time
 import shutil
+import typing as t
 import logging
 import tempfile
 import warnings
@@ -12,7 +13,6 @@ import functools
 import posixpath
 import threading
 import dataclasses
-import typing as t
 import urllib.parse
 
 import requests

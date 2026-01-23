@@ -31,15 +31,17 @@ python -m pytest
 
 ## Styling
 
-Code is linted with [Black](https://pypi.org/project/black/). It needs to be installed
+Code is linted with [Black](https://pypi.org/project/black/) and
+[isort](https://pypi.org/project/isort/). It needs to be installed
 first:
 
 ```shell
-python -m pip install black
+python -m pip install black isort
 ```
 
 Then run and commit before submitting a pull-request:
 
 ```shell
 python -m black src
+python -m isort src
 ```

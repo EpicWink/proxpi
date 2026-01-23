@@ -49,3 +49,7 @@ package-dir = { "" = "src" }
 packages = { find = { namespaces = false, where = ["src"] } }
 
 [tool.setuptools_scm]
+
+[tool.isort]
+length_sort_straight = true
+profile = "black"
