@@ -1,6 +1,5 @@
 """Test ``proxpi`` server."""
 
-import os
 import enum
 import hashlib
 import logging
@@ -11,11 +10,11 @@ import contextlib
 from urllib import parse as urllib_parse
 from unittest import mock
 
-import flask
 import pytest
 import requests
 import proxpi.server
 import packaging.specifiers
+import starlette.applications
 
 from . import _utils
 
@@ -47,7 +46,7 @@ def set_mock_index_response_is_json(value: _ResponseType):
         current_mock_index_response_type = original
 
 
-def make_mock_index_app(index_name: str) -> flask.Flask:
+def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
     """Construct a mock package index app.
 
     Args:
@@ -57,11 +56,16 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
         WSGI app for Python package simple repository index
     """
 
-    app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
-    indexes_dir_relative_path = pathlib.PurePath("data") / "indexes"
+    import starlette.routing
+    import starlette.requests
+    import starlette.responses
+    import starlette.exceptions
 
-    @app.route("/")
-    def list_projects() -> flask.Response:
+    indexes_dir_path = pathlib.PurePath(__file__).parent / "data" / "indexes"
+
+    def list_projects(
+        _: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
         if current_mock_index_response_type in (
             _ResponseType.json,
             _ResponseType.json_yanked,
@@ -76,17 +80,19 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
             file_name = "index.html"
             mime_type = "text/html"
 
-        response = flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / file_name,
-            mimetype=mime_type,
-        )
+        path = indexes_dir_path / index_name / file_name
+        assert path.is_relative_to(indexes_dir_path)
+
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
         if current_mock_index_response_type == _ResponseType.html_without_type:
             del response.headers["Content-Type"]
         return response
 
-    @app.route("/<name>/")
-    def get_project(name: str) -> flask.Response:
+    def get_project(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        name = request.path_params["name"]
+
         if current_mock_index_response_type == _ResponseType.json:
             file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
@@ -101,24 +107,32 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
             file_name = "index.html"
             mime_type = "text/html"
 
-        response = flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / name / file_name,
-            mimetype=mime_type,
-        )
+        path = indexes_dir_path / index_name / name / file_name
+        assert path.is_relative_to(indexes_dir_path)
+
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
         if current_mock_index_response_type == _ResponseType.html_without_type:
             del response.headers["Content-Type"]
         return response
 
-    @app.route("/<project_name>/<file_name>")
-    def get_file(project_name: str, file_name: str) -> flask.Response:
-        return flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / project_name / file_name,
-            mimetype="application/octect-stream",
+    def get_file(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        project_name = request.path_params["project_name"]
+        file_name = request.path_params["file_name"]
+
+        path = indexes_dir_path / index_name / project_name / file_name
+        assert path.is_relative_to(indexes_dir_path)
+
+        return starlette.responses.FileResponse(
+            path=path, media_type="application/octect-stream"
         )
 
-    return app
+    return starlette.applications.Starlette(routes=[
+        starlette.routing.Route("/", list_projects),
+        starlette.routing.Route("/{name}/", get_project),
+        starlette.routing.Route("/{project_name}/{file_name}", get_file),
+    ])  # fmt: skip
 
 
 @pytest.fixture(scope="module")
