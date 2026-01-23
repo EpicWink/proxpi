@@ -81,7 +81,7 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
             mime_type = "text/html"
 
         path = indexes_dir_path / index_name / file_name
-        assert path.is_relative_to(indexes_dir_path)
+        path.relative_to(indexes_dir_path)  # raises if not relative
 
         response = starlette.responses.FileResponse(path=path, media_type=mime_type)
         if current_mock_index_response_type == _ResponseType.html_without_type:
@@ -108,7 +108,7 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
             mime_type = "text/html"
 
         path = indexes_dir_path / index_name / name / file_name
-        assert path.is_relative_to(indexes_dir_path)
+        path.relative_to(indexes_dir_path)  # raises if not relative
 
         response = starlette.responses.FileResponse(path=path, media_type=mime_type)
         if current_mock_index_response_type == _ResponseType.html_without_type:
@@ -122,7 +122,7 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
         file_name = request.path_params["file_name"]
 
         path = indexes_dir_path / index_name / project_name / file_name
-        assert path.is_relative_to(indexes_dir_path)
+        path.relative_to(indexes_dir_path)  # raises if not relative
 
         return starlette.responses.FileResponse(
             path=path, media_type="application/octect-stream"
