@@ -1,5 +1,6 @@
 """Testing utilities."""
 
+import time
 import socket
 import typing as t
 import asyncio
@@ -103,6 +104,7 @@ def make_server(app: "hypercorn.typing.Framework") -> t.Generator[str, None, Non
     shutdown_future = None  # type: t.Union[asyncio.Future, None]
     thread = Thread(target=asyncio.run, args=(serve(),))
     thread.start()
+    time.sleep(0.01)
     yield f"http://localhost:{port}"
     shutdown_future.set_result(None)
     thread.join(timeout=0.1)
