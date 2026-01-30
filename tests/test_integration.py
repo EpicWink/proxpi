@@ -1,18 +1,22 @@
 """Test ``proxpi`` server."""
 
 import enum
+import time
 import hashlib
 import logging
 import pathlib
 import warnings
+import threading
 import posixpath
 import contextlib
+import concurrent.futures
 from urllib import parse as urllib_parse
 from unittest import mock
 
 import pytest
 import requests
 import proxpi.server
+import proxpi._cache
 import packaging.specifiers
 import starlette.applications
 
@@ -475,11 +479,7 @@ def test_download_file_failed(mock_root_index, server, readonly_package_dir):
             f"{server}/index/numpy/numpy-1.23.1.tar.gz",
             allow_redirects=False,
         )
-    assert response.status_code // 100 == 3
-    url_parsed = urllib_parse.urlsplit(response.headers["location"])
-    mock_root_index_parsed = urllib_parse.urlsplit(mock_root_index)
-    assert url_parsed.netloc == mock_root_index_parsed.netloc
-    assert posixpath.split(url_parsed.path)[1] == "numpy-1.23.1.tar.gz"
+    assert response.status_code == 200
 
 
 @pytest.mark.parametrize("file_mime_type", ["application/octet-stream", None])
@@ -502,3 +502,80 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
         assert response.headers["Content-Type"] == "application/x-tar+gzip"
         assert not response.headers.get("Content-Encoding")
     response.close()
+
+
+def test_streaming_success(server, tmp_path):
+    """Test multiple clients streaming the same file concurrently."""
+    chunk_size = 1024
+    file_content = bytes.fromhex("DEADBEEF") * chunk_size
+
+    download_file = tmp_path / "downloading_file"
+    # Create the file so it exists for subscribers
+    download_file.touch()
+
+    status = proxpi.server._cache.DownloadStatus()
+    status._temp_download_path = str(download_file)
+    status._upstream_status_code = 200
+    status._upstream_headers = [("Content-Type", "application/octet-stream")]
+
+    def simulate_download():
+        time.sleep(1.0)
+        for i in range(0, len(file_content), chunk_size):
+            chunk = file_content[i : i + chunk_size]
+            status.broadcast_chunk(chunk)
+            time.sleep(0.01)
+        status.broadcast_eof()
+
+    def client_request():
+        return requests.get(f"{server}/index/p/f", stream=True)
+
+    with mock.patch.object(
+        proxpi.server.cache,
+        "get_file",
+        side_effect=proxpi.server._cache.Downloading(status),
+    ):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Start download simulation
+            downloader = executor.submit(simulate_download)
+
+            # Start clients
+            futures = [executor.submit(client_request) for _ in range(3)]
+
+            downloader.result()
+            responses = [f.result() for f in futures]
+
+    for resp in responses:
+        assert resp.status_code == 200
+        assert resp.content == file_content
+
+
+def test_streaming_failure(server, tmp_path):
+    """Test streaming failure propagation."""
+    download_file = tmp_path / "fail_file"
+    download_file.touch()
+
+    status = proxpi.server._cache.DownloadStatus()
+    status._temp_download_path = str(download_file)
+    status._upstream_status_code = 200
+    status._upstream_headers = [("Content-Type", "application/octet-stream")]
+
+    def simulate_fail():
+        time.sleep(1.0)
+        status.broadcast_chunk(b"start")
+        time.sleep(0.1)
+        status.broadcast_eof(requests.exceptions.ConnectionError("Oh no"))
+
+    with mock.patch.object(
+        proxpi.server.cache,
+        "get_file",
+        side_effect=proxpi.server._cache.Downloading(status),
+    ):
+        # Start simulation in background
+        t = threading.Thread(target=simulate_fail)
+        t.start()
+
+        resp = requests.get(f"{server}/index/p/f", stream=True)
+        content = resp.content
+        t.join()
+
+    assert b"Oh no" in content
