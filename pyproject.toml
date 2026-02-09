@@ -1,7 +1,7 @@
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools >= 61.0, < 81.0",
+    "setuptools >= 77.0",
     "setuptools-scm[toml] >= 3.4",
 ]
 
@@ -27,7 +27,8 @@ dependencies = [
 ]
 description = "PyPI caching mirror"
 keywords = ["pypi", "index", "mirror", "cache"]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = "~= 3.7"
 
