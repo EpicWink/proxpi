@@ -1,6 +1,6 @@
 # proxpi
 [![Build status](
-https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
+https://github.com/EpicWink/proxpi/actions/workflows/test-python-package.yml/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
