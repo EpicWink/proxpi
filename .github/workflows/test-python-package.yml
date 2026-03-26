@@ -51,11 +51,7 @@ jobs:
     - name: Install package, and lint and test requirements
       run: pip install
         --requirement ./tests/requirements.txt
-        black pytest pytest-cov isort .
-    - name: Lint with black
-      run: black --check src/
-    - name: Sort imports with isort
-      run: isort --check src/
+        pytest pytest-cov .
     - name: Test with pytest
       run: |
         pytest -vvra \
@@ -67,3 +63,23 @@ jobs:
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+
+  lint:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.x
+        cache: pip
+    - name: Update pip
+      run: pip install -U pip
+    - name: Install lint requirements
+      run: pip install black isort
+    - name: Lint with black
+      run: black --check src/
+    - name: Sort imports with isort
+      run: isort --check src/
