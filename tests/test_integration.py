@@ -24,11 +24,11 @@ logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 
-class _ResponseType(enum.Enum):
-    html = enum.auto()
-    html_without_type = enum.auto()
-    json = enum.auto()
-    json_yanked = enum.auto()
+class _ResponseType(str, enum.Enum):
+    html = "html"
+    html_without_type = "html_without_type"
+    json = "json"
+    json_yanked = "json_yanked"
 
 
 current_mock_index_response_type = _ResponseType.html
