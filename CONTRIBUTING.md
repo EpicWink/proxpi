@@ -14,10 +14,10 @@ After cloning (and optionally setting up a
 package and the testing dependencies:
 
 ```shell
-python -m pip install . -r tests/requirements.txt
+python -m pip install -r dev.requirements.txt
 ```
 
-Replace `.` with `-e .` to install the project as [editable](
+This installs the project as [editable](
   https://pip.pypa.io/en/stable/topics/local-project-installs/#editable-installs
 ) (ie not requiring a reinstall every time you make a change).
 
@@ -32,12 +32,7 @@ python -m pytest
 ## Styling
 
 Code is linted with [Black](https://pypi.org/project/black/) and
-[isort](https://pypi.org/project/isort/). It needs to be installed
-first:
-
-```shell
-python -m pip install black isort
-```
+[isort](https://pypi.org/project/isort/). These are installed above.
 
 Then run and commit before submitting a pull-request:
 
@@ -45,3 +40,9 @@ Then run and commit before submitting a pull-request:
 python -m black src
 python -m isort src
 ```
+
+### Style
+
+* Black formatting can be specifically in reasonable scenarios with `# fmt: skip`
+* Only use full-path imports (eg `import requests.exceptions` instead of `from requests
+  import exceptions` or `from requests.exceptions import RequestException`)
