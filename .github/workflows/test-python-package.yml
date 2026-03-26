@@ -18,7 +18,7 @@ on:
       - pyproject.toml
       - setup.py
     tags:
-      - v*
+      - v* # zizmor: ignore[cache-poisoning] test workflow doesn't perform releases
 
 jobs:
   test:
@@ -62,7 +62,7 @@ jobs:
     - name: Upload coverage
       uses: codecov/codecov-action@v5
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+        token: ${{ secrets.CODECOV_TOKEN }} # zizmor: ignore[secrets-outside-env]
 
   lint:
     permissions:
