@@ -3,6 +3,7 @@
 import sys
 import logging
 import subprocess
+import concurrent.futures
 
 import pytest
 
@@ -19,28 +20,41 @@ def server():
     yield from _utils.make_server(proxpi.server.app)
 
 
-def test_pip_download(server, tmp_path):
-    """Test package installation."""
+def run_pip(server, dest, pkgs):
     args = [
         sys.executable,
         "-m",
         "pip",
         "--no-cache-dir",
         "download",
-        "--index-url", f"{server}/index/",
+        "--index-url",
+        f"{server}/index/",
     ]
-
-    p = subprocess.run(
-        [*args, "--dest", str(tmp_path / "dest1"), "Jinja2", "marshmallow"],
-    )
+    p = subprocess.run([*args, "--dest", str(dest), *pkgs], check=True)
     assert p.returncode == 0
-    contents = list((tmp_path / "dest1").iterdir())
+    return list(dest.iterdir())
+
+
+def test_pip_download(server, tmp_path):
+    """Test package installation."""
+    contents = run_pip(server, tmp_path / "dest1", ["Jinja2", "marshmallow"])
     print(contents)
     assert any("jinja2" in p.name.lower() for p in contents)
     assert any("marshmallow" in p.name.lower() for p in contents)
 
-    subprocess.run([*args, "--dest", str(tmp_path / "dest2"), "Jinja2"])
-    assert p.returncode == 0
-    contents = list((tmp_path / "dest2").iterdir())
+    contents = run_pip(server, tmp_path / "dest2", ["Jinja2"])
     print(contents)
     assert any("jinja2" in p.name.lower() for p in contents)
+
+
+def test_concurrent_pip_download(server, tmp_path):
+    """Test concurrent package installation."""
+    dest = tmp_path / "concurrent_dest"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [
+            executor.submit(run_pip, server, dest / str(i), ["flask"]) for i in range(4)
+        ]
+        results = [f.result() for f in futures]
+
+    for contents in results:
+        assert any("flask" in p.name.lower() for p in contents)
