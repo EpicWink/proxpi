@@ -86,9 +86,10 @@ jobs:
         platforms: linux/amd64,linux/arm64
 
     - name: Login to DockerHub
-      run: >
-        echo ${{ secrets.DOCKERHUB_PASSWORD }}
-        | docker login --password-stdin -u epicwink
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      with:
+        username: epicwink
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
     - name: Build image tag
       id: build-tag
