@@ -12,7 +12,9 @@ on:
       - app.requirements.txt
       - Dockerfile
   push:
-    branches: [master]
+    branches:
+      - master
+      - ver/*
     paths:
       - src/**
       - tests/**

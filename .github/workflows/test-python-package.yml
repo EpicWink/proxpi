@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - master
+      - ver/*
     paths:
       - src/**
       - tests/**
