@@ -453,7 +453,9 @@ class _IndexCache:
 
         stream = _ResponseReader.from_response(response)
 
-        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
+        for _, child in lxml.etree.iterparse(
+            stream, tag="a", html=True, resolve_entities="internal"
+        ):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
                 self._index[name] = child.attrib["href"]
@@ -521,7 +523,9 @@ class _IndexCache:
 
         stream = _ResponseReader.from_response(response)
 
-        for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
+        for _, child in lxml.etree.iterparse(
+            stream, tag="a", html=True, resolve_entities="internal"
+        ):
             if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
                 package.files[file.name] = file
