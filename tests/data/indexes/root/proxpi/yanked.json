@@ -1,0 +1,38 @@
+{
+  "files": [
+    {
+      "filename": "proxpi-1.1.0-py3-none-any.whl",
+      "hashes": {
+        "sha256": "32baf0c11f7e89a1b1fba9d39117b00f64a7a2e8c4d92dbad316e82701804013"
+      },
+      "requires-python": ">=3.7",
+      "url": "proxpi-1.1.0-py3-none-any.whl",
+      "yanked": false
+    },
+    {
+      "filename": "proxpi-1.1.0.tar.gz",
+      "hashes": {
+        "sha256": "0024c61ffaf1d4b424eaff554bb6cec1cfd580cc2ff64ca7858c7ced6b880429"
+      },
+      "requires-python": ">=3.7",
+      "url": "proxpi-1.1.0.tar.gz",
+      "yanked": false
+    },
+    {
+      "filename": "proxpi-1.0.0-py3-none-any.whl",
+      "hashes": {},
+      "url": "proxpi-1.0.0-py3-none-any.whl",
+      "yanked": false
+    },
+    {
+      "filename": "proxpi-1.0.0.tar.gz",
+      "hashes": {},
+      "url": "proxpi-1.0.0.tar.gz",
+      "yanked": false
+    }
+  ],
+  "meta": {
+    "api-version": "1.0"
+  },
+  "name": "proxpi"
+}

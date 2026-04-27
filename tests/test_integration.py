@@ -1,206 +1,136 @@
 """Test ``proxpi`` server."""
 
-import io
-import os
+import enum
 import hashlib
 import logging
-import tarfile
+import pathlib
 import warnings
 import posixpath
 import contextlib
-import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
 
-import flask
-import jinja2
 import pytest
 import requests
-import proxpi._cache  # noqa
 import proxpi.server
 import packaging.specifiers
+import starlette.applications
 
 from . import _utils
 
 proxpi_server = proxpi.server
-# noinspection PyProtectedMember
-File = proxpi._cache.FileFromHTML
 
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
-mock_index_response_is_json = False
+
+class _ResponseType(str, enum.Enum):
+    html = "html"
+    json = "json"
+    json_yanked = "json_yanked"
+
+
+current_mock_index_response_type = _ResponseType.html
 
 
 @contextlib.contextmanager
-def set_mock_index_response_is_json(value: t.Union[bool, str]):
-    global mock_index_response_is_json
+def set_mock_index_response_is_json(value: _ResponseType):
+    global current_mock_index_response_type
 
-    original_mock_index_response_is_json = mock_index_response_is_json
-    mock_index_response_is_json = value
+    original = current_mock_index_response_type
+    current_mock_index_response_type = value
     try:
         yield
     finally:
-        mock_index_response_is_json = original_mock_index_response_is_json
+        current_mock_index_response_type = original
 
 
-def make_mock_index_app(projects: t.Dict[str, t.List[File]]) -> flask.Flask:
+def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
     """Construct a mock package index app.
 
-    Warning: uses ``proxpi``'s templates for index responses, and files are
-    simple
-
     Args:
-        projects: index projects with their files
+        index_name: index name in test data indexes directory
 
     Returns:
         WSGI app for Python package simple repository index
     """
 
-    files_content = {}
-    for project_name_, files_ in projects.items():
-        for file_ in files_:
-            stream = io.BytesIO()
-            with tarfile.TarFile.open(mode="w:gz", fileobj=stream) as tf:
-                tf.addfile(
-                    tarinfo=tarfile.TarInfo(name="spam"),
-                    fileobj=io.BytesIO(file_.url.encode(encoding="utf-8")),
-                )
-            file_content_ = stream.getvalue()
-            files_content[project_name_, file_.name] = file_content_
-            if file_.fragment:
-                assert file_.fragment == "sha256="
-                file_.fragment += hashlib.sha256(file_content_).hexdigest()
+    import starlette.routing
+    import starlette.requests
+    import starlette.responses
+    import starlette.exceptions
 
-    app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
-    app.jinja_loader = jinja2.PackageLoader("proxpi")
+    indexes_dir_path = pathlib.PurePath(__file__).parent / "data" / "indexes"
 
-    def build_json_v1_response(data: dict) -> flask.Response:
-        response = flask.jsonify(data)
-        response.mimetype = f"application/vnd.pypi.simple.v1+json"
-        return response
+    def list_projects(
+        _: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        if current_mock_index_response_type in (
+            _ResponseType.json,
+            _ResponseType.json_yanked,
+        ):
+            file_name = "index.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        else:
+            assert current_mock_index_response_type == _ResponseType.html
+            file_name = "index.html"
+            mime_type = "text/html"
 
-    @app.route("/")
-    def list_projects() -> t.Union[str, flask.Response]:
-        if mock_index_response_is_json:
-            return build_json_v1_response({
-                "meta": {"api-version": "1.0"},
-                "projects": [{"name": n} for n in list(projects)],
-            })  # fmt: skip
-        return flask.render_template("packages.html", package_names=list(projects))
+        path = indexes_dir_path / index_name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
 
-    @app.route("/<name>/")
-    def get_project(name: str) -> t.Union[str, flask.Response]:
-        files = projects.get(name)
-        if not files:
-            flask.abort(404)
-        if mock_index_response_is_json:
-            files_data = []
-            for file in files:
-                file_data = file.to_json_response()
-                file_data["url"] = file.name
-                if (
-                    mock_index_response_is_json == "yanked"
-                    and not file_data.get("yanked")
-                ):
-                    file_data["yanked"] = False
-                files_data.append(file_data)
-            return build_json_v1_response({
-                "meta": {"api-version": "1.0"},
-                "name": name,
-                "files": files_data,
-            })  # fmt: skip
-        return flask.render_template("files.html", package_name=name, files=files)
+        return starlette.responses.FileResponse(path=path, media_type=mime_type)
 
-    @app.route("/<project_name>/<file_name>")
-    def get_file(project_name: str, file_name: str) -> bytes:
-        file_content = files_content.get((project_name, file_name))
-        if not file_content:
-            flask.abort(404)
-        return file_content
+    def get_project(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        name = request.path_params["name"]
 
-    return app
+        if current_mock_index_response_type == _ResponseType.json:
+            file_name = "index.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.json_yanked:
+            file_name = "yanked.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        else:
+            assert current_mock_index_response_type == _ResponseType.html
+            file_name = "index.html"
+            mime_type = "text/html"
+
+        path = indexes_dir_path / index_name / name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
+
+        return starlette.responses.FileResponse(path=path, media_type=mime_type)
+
+    def get_file(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        project_name = request.path_params["project_name"]
+        file_name = request.path_params["file_name"]
+
+        path = indexes_dir_path / index_name / project_name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
+
+        return starlette.responses.FileResponse(
+            path=path, media_type="application/octect-stream"
+        )
+
+    return starlette.applications.Starlette(routes=[
+        starlette.routing.Route("/", list_projects),
+        starlette.routing.Route("/{name}/", get_project),
+        starlette.routing.Route("/{project_name}/{file_name}", get_file),
+    ])  # fmt: skip
 
 
 @pytest.fixture(scope="module")
 def mock_root_index():
-    app = make_mock_index_app(projects={
-        "proxpi": [
-            File(
-                name="proxpi-1.1.0-py3-none-any.whl",
-                url="spam eggs 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="proxpi-1.1.0.tar.gz",
-                url="foo bar 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="proxpi-1.0.0-py3-none-any.whl",
-                url="spam eggs 41",
-                fragment="",
-                attributes={},
-            ),
-            File(
-                name="proxpi-1.0.0.tar.gz",
-                url="foo bar 42",
-                fragment="",
-                attributes={"data-requires-python": ""},
-            ),
-        ],
-        "numpy": [
-            File(
-                name="numpy-1.23.1-cp310-cp310-manylinux_2_17_x86_64.whl",
-                url="",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-            File(
-                name="numpy-1.23.1-cp310-cp310-win_amd64.whl",
-                url="",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8", "data-yanked": ""},
-            ),
-            File(
-                name="numpy-1.23.1.tar.gz",
-                url="foo bar 42",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-        ],
-    })  # fmt: skip
+    app = make_mock_index_app(index_name="root")
     yield from _utils.make_server(app)
 
 
 @pytest.fixture(scope="module")
 def mock_extra_index():
-    app = make_mock_index_app(projects={
-        "scipy": [
-            File(
-                name="scipy-1.9.0-cp310-cp310-manylinux_2_17_x86_64.whl",
-                url="spam eggs 17",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-            File(
-                name="scipy-1.9.0.tar.gz",
-                url="foo bar 17",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.7"},
-            ),
-        ],
-        "numpy": [
-            File(
-                name="numpy-1.23.1-cp310-cp310-macosx_10_9_x86_64.whl",
-                url="spam eggs 40c",
-                fragment="sha256=",
-                attributes={"data-requires-python": ">=3.8"},
-            ),
-        ],
-    })  # fmt: skip
+    app = make_mock_index_app(index_name="extra")
     yield from _utils.make_server(app)
 
 
@@ -223,9 +153,22 @@ def server(mock_root_index, mock_extra_index):
         yield from _utils.make_server(proxpi_server.app)
 
 
+@pytest.fixture
+def clear_index_cache(server):
+    proxpi.server.cache.invalidate_list()
+
+
+@pytest.fixture
+def clear_projects_cache(server):
+    for project_name in proxpi.server.cache.list_projects():
+        proxpi.server.cache.invalidate_project(project_name)
+
+
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
-@pytest.mark.parametrize("index_json_response", [False, True])
-def test_list(server, accept, index_json_response):
+@pytest.mark.parametrize(
+    "index_json_response", [_ResponseType.html, _ResponseType.json]
+)
+def test_list(server, accept, index_json_response, clear_index_cache):
     """Test getting package list."""
     with set_mock_index_response_is_json(index_json_response):
         response = requests.get(f"{server}/index/", headers={"Accept": accept})
@@ -254,8 +197,12 @@ def test_list(server, accept, index_json_response):
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
-@pytest.mark.parametrize("index_json_response", [False, True])
-def test_list_json(server, accept, index_json_response):
+@pytest.mark.parametrize(
+    "index_json_response", [_ResponseType.html, _ResponseType.json]
+)
+def test_list_json(
+    server, accept, index_json_response, mock_root_index, clear_index_cache
+):
     """Test getting package list with JSON API."""
     with set_mock_index_response_is_json(index_json_response):
         response = requests.get(f"{server}/index/", headers={"Accept": accept})
@@ -274,8 +221,12 @@ def test_list_json(server, accept, index_json_response):
 @pytest.mark.parametrize("accept", [
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
-def test_package(server, project, accept, index_json_response):
+@pytest.mark.parametrize("index_json_response", [
+    _ResponseType.html,
+    _ResponseType.json,
+    _ResponseType.json_yanked,
+])  # fmt: skip
+def test_package(server, project, accept, index_json_response, clear_projects_cache):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
     with set_mock_index_response_is_json(index_json_response):
@@ -326,6 +277,26 @@ def test_package(server, project, accept, index_json_response):
             else:
                 assert gpg_response.status_code == 404
 
+        if any(k == "data-dist-info-metadata" for k, _ in attributes):
+            (value,) = (v for k, v in attributes if k == "data-dist-info-metadata")
+            (expected,) = (v for k, v in attributes if k == "data-core-metadata")
+            assert value == expected
+
+        if any(k == "data-core-metadata" for k, _ in attributes):
+            (expected_core_metadata_hash,) = (
+                v for k, v in attributes if k == "data-core-metadata"
+            )
+            core_metadata_response = requests.get(urllib_parse.urljoin(
+                project_url, href_stripped + ".metadata"
+            ))
+            core_metadata_response.raise_for_status()
+            if expected_core_metadata_hash and expected_core_metadata_hash != "true":
+                hash_name, expected_hash_value = expected_core_metadata_hash.split("=")
+                core_metadata_hash_value = hashlib.new(
+                    hash_name, core_metadata_response.content
+                ).hexdigest()
+                assert core_metadata_hash_value == expected_hash_value
+
         if any(k == "data-requires-python" for k, _ in attributes):
             (python_requirement,) = (
                 v for k, v in attributes if k == "data-requires-python"
@@ -353,8 +324,13 @@ def test_package(server, project, accept, index_json_response):
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("query_format", [False, True])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
-def test_package_json(server, project, accept, query_format, index_json_response):
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.json, _ResponseType.json_yanked],
+)
+def test_package_json(
+    server, project, accept, query_format, index_json_response, clear_projects_cache
+):
     """Test getting package files with JSON API."""
     params = None
     headers = None
@@ -362,10 +338,10 @@ def test_package_json(server, project, accept, query_format, index_json_response
         params = {"format": accept}
     else:
         headers = {"Accept": accept}
+    project_url = f"{server}/index/{project}/"
+
     with set_mock_index_response_is_json(index_json_response):
-        response = requests.get(
-            f"{server}/index/{project}/", params=params, headers=headers
-        )
+        response = requests.get(project_url, params=params, headers=headers)
 
     assert response.status_code == 200
     assert response.headers["Content-Type"][:35] == (
@@ -383,6 +359,26 @@ def test_package_json(server, project, accept, query_format, index_json_response
         assert file["url"]
         assert file["filename"] == file["url"]
         assert isinstance(file["hashes"], dict)
+
+        assert not file.get("dist-info-metadata")
+
+        url_parts: urllib_parse.SplitResult = urllib_parse.urlsplit(file["url"])
+        url_parts_stripped = url_parts._replace(fragment="")
+        url_stripped = url_parts_stripped.geturl()
+        assert url_stripped == file["filename"]
+
+        if file.get("core-metadata"):
+            core_metadata_response = requests.get(
+                urllib_parse.urljoin(project_url, url_stripped + ".metadata"),
+            )
+            core_metadata_response.raise_for_status()
+
+            if isinstance(file["core-metadata"], dict):
+                for hash_name, expected_hash_value in file["core-metadata"].items():
+                    core_metadata_hash_value = hashlib.new(
+                        hash_name, core_metadata_response.content
+                    ).hexdigest()
+                    assert core_metadata_hash_value == expected_hash_value
 
     files_by_filename = {f["filename"]: f for f in response_data["files"]}
     if project == "proxpi":
@@ -438,13 +434,10 @@ def test_nonexistant_file_from_existing_package(server):
 @pytest.fixture
 def readonly_package_dir(tmp_path):
     package_dir = tmp_path / "packages"
-    package_dir.mkdir(mode=0o555)
+    package_dir.touch()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pytest.PytestUnhandledThreadExceptionWarning)
-        try:
-            yield package_dir
-        finally:
-            (tmp_path / "packages").chmod(0o755)  # allow clean-up
+        yield package_dir
 
 
 def test_download_file_failed(mock_root_index, server, readonly_package_dir):
