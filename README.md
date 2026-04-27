@@ -1,6 +1,6 @@
 # proxpi
 [![Build status](
-https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
+https://github.com/EpicWink/proxpi/actions/workflows/test-python-package.yml/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
@@ -93,8 +93,7 @@ change in a package index.
 * `PROXPI_CACHE_DIR`: downloaded project files cache directory path, default: a new
   temporary directory
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
-  `"application/octet-stream"` instead of letting Flask guess it. This may be needed
-  if your package installer (eg Poetry) mishandles responses with declared encoding.
+  `"application/octet-stream"` instead of letting Flask guess it
 * `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,
@@ -211,6 +210,10 @@ Another option is to set up a proxy, but that's more effort than the above metho
 
 * [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
   packages, proxy to PyPI when not-found, supports package upload, no caching
+
+* [`dumb-pypi`](https://pypi.org/project/dumb-pypi/): generates a static website of a
+  package index pointing to statically-located files, no hosting (therefore no caching
+  nor proxying unless configured in server)
 
 * [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
   directory of packages, with redirecting/cached proxying to indexes, authentication and

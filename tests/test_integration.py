@@ -1,21 +1,20 @@
 """Test ``proxpi`` server."""
 
-import os
+import enum
 import hashlib
 import logging
 import pathlib
 import warnings
 import posixpath
 import contextlib
-import typing as t
 from urllib import parse as urllib_parse
 from unittest import mock
 
-import flask
 import pytest
 import requests
 import proxpi.server
 import packaging.specifiers
+import starlette.applications
 
 from . import _utils
 
@@ -24,22 +23,30 @@ proxpi_server = proxpi.server
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
-mock_index_response_is_json = False
+
+class _ResponseType(str, enum.Enum):
+    html = "html"
+    html_without_type = "html_without_type"
+    json = "json"
+    json_yanked = "json_yanked"
+
+
+current_mock_index_response_type = _ResponseType.html
 
 
 @contextlib.contextmanager
-def set_mock_index_response_is_json(value: t.Union[bool, str]):
-    global mock_index_response_is_json
+def set_mock_index_response_is_json(value: _ResponseType):
+    global current_mock_index_response_type
 
-    original_mock_index_response_is_json = mock_index_response_is_json
-    mock_index_response_is_json = value
+    original = current_mock_index_response_type
+    current_mock_index_response_type = value
     try:
         yield
     finally:
-        mock_index_response_is_json = original_mock_index_response_is_json
+        current_mock_index_response_type = original
 
 
-def make_mock_index_app(index_name: str) -> flask.Flask:
+def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
     """Construct a mock package index app.
 
     Args:
@@ -49,49 +56,83 @@ def make_mock_index_app(index_name: str) -> flask.Flask:
         WSGI app for Python package simple repository index
     """
 
-    app = flask.Flask("proxpi-tests", root_path=os.path.split(__file__)[0])
-    indexes_dir_relative_path = pathlib.PurePath("data") / "indexes"
+    import starlette.routing
+    import starlette.requests
+    import starlette.responses
+    import starlette.exceptions
 
-    @app.route("/")
-    def list_projects() -> flask.Response:
-        if mock_index_response_is_json:
+    indexes_dir_path = pathlib.PurePath(__file__).parent / "data" / "indexes"
+
+    def list_projects(
+        _: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        if current_mock_index_response_type in (
+            _ResponseType.json,
+            _ResponseType.json_yanked,
+        ):
             file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
+            assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
             mime_type = "text/html"
 
-        return flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / file_name,
-            mimetype=mime_type,
-        )
+        path = indexes_dir_path / index_name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
 
-    @app.route("/<name>/")
-    def get_project(name: str) -> flask.Response:
-        if mock_index_response_is_json:
-            stem = "yanked" if mock_index_response_is_json == "yanked" else "index"
-            file_name = f"{stem}.json"
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
+
+    def get_project(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        name = request.path_params["name"]
+
+        if current_mock_index_response_type == _ResponseType.json:
+            file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.json_yanked:
+            file_name = "yanked.json"
+            mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
+            assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
             mime_type = "text/html"
 
-        return flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / name / file_name,
-            mimetype=mime_type,
+        path = indexes_dir_path / index_name / name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
+
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
+
+    def get_file(
+        request: starlette.requests.Request,
+    ) -> starlette.responses.FileResponse:
+        project_name = request.path_params["project_name"]
+        file_name = request.path_params["file_name"]
+
+        path = indexes_dir_path / index_name / project_name / file_name
+        path.relative_to(indexes_dir_path)  # raises if not relative
+
+        return starlette.responses.FileResponse(
+            path=path, media_type="application/octect-stream"
         )
 
-    @app.route("/<project_name>/<file_name>")
-    def get_file(project_name: str, file_name: str) -> flask.Response:
-        return flask.send_from_directory(
-            directory=indexes_dir_relative_path,
-            path=pathlib.PurePath(index_name) / project_name / file_name,
-            mimetype="application/octect-stream",
-        )
-
-    return app
+    return starlette.applications.Starlette(routes=[
+        starlette.routing.Route("/", list_projects),
+        starlette.routing.Route("/{name}/", get_project),
+        starlette.routing.Route("/{project_name}/{file_name}", get_file),
+    ])  # fmt: skip
 
 
 @pytest.fixture(scope="module")
@@ -137,7 +178,10 @@ def clear_projects_cache(server):
 
 
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
-@pytest.mark.parametrize("index_json_response", [False, True])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
+)
 def test_list(server, accept, index_json_response, clear_index_cache):
     """Test getting package list."""
     with set_mock_index_response_is_json(index_json_response):
@@ -167,7 +211,10 @@ def test_list(server, accept, index_json_response, clear_index_cache):
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.latest+json",
 ])
-@pytest.mark.parametrize("index_json_response", [False, True])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
+)
 def test_list_json(
     server, accept, index_json_response, mock_root_index, clear_index_cache
 ):
@@ -189,7 +236,12 @@ def test_list_json(
 @pytest.mark.parametrize("accept", [
     "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
 ])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
+@pytest.mark.parametrize("index_json_response", [
+    _ResponseType.html,
+    _ResponseType.html_without_type,
+    _ResponseType.json,
+    _ResponseType.json_yanked,
+])  # fmt: skip
 def test_package(server, project, accept, index_json_response, clear_projects_cache):
     """Test getting package files."""
     project_url = f"{server}/index/{project}/"
@@ -288,7 +340,10 @@ def test_package(server, project, accept, index_json_response, clear_projects_ca
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize("query_format", [False, True])
-@pytest.mark.parametrize("index_json_response", [False, True, "yanked"])
+@pytest.mark.parametrize(
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.json, _ResponseType.json_yanked],
+)
 def test_package_json(
     server, project, accept, query_format, index_json_response, clear_projects_cache
 ):
@@ -444,6 +499,6 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
         assert response.headers["Content-Type"] == "application/octet-stream"
         assert not response.headers.get("Content-Encoding")
     else:
-        assert response.headers["Content-Type"] == "application/x-tar"
-        assert response.headers["Content-Encoding"] == "gzip"
+        assert response.headers["Content-Type"] == "application/x-tar+gzip"
+        assert not response.headers.get("Content-Encoding")
     response.close()

@@ -3,8 +3,8 @@
 import os
 import gzip
 import zlib
-import logging
 import typing as t
+import logging
 import urllib.parse
 
 import flask
@@ -223,7 +223,14 @@ def get_file(package_name: str, file_name: str):
     scheme = urllib.parse.urlparse(path).scheme
     if scheme and scheme != "file":
         return flask.redirect(path)
-    return flask.send_file(path, mimetype=_file_mime_type)
+    response = flask.send_file(path, mimetype=_file_mime_type)
+    if (
+        response.content_encoding == "gzip"
+        and response.content_type == "application/x-tar"
+    ):
+        del response.content_encoding
+        response.content_type = "application/x-tar+gzip"
+    return response
 
 
 @app.route("/cache/list", methods=["DELETE"])
