@@ -3,10 +3,26 @@ name: publish-docker
 on:
   pull_request:
     branches: [master]
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
+      - .dockerignore
+      - app.requirements.txt
+      - Dockerfile
   push:
     branches:
       - master
       - ver/*
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
+      - .dockerignore
+      - app.requirements.txt
+      - Dockerfile
   release:
     types: [created]
 
@@ -100,7 +116,7 @@ jobs:
         || echo "${GITHUB_REF_NAME}")"
         >> "$GITHUB_OUTPUT"
 
-    - name: Push all architectures
+    - name: Build and push image for all architectures
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
       with:
         context: .
