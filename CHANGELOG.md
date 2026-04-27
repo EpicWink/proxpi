@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### Features
+
+* Support [simple repository API](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
+  v1.1, both as producer and consumer (ie project versions, and file size and
+  upload-time)
+
+## 1.3.0 - *unreleased*
+
 ### Changes
 
 * Don't include `Content-Encoding` header in cached sdist responses
