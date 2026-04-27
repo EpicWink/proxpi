@@ -4,42 +4,84 @@ on:
   pull_request:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
   push:
     branches:
       - master
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - setup.py
     tags:
-      - v*
+      - v* # zizmor: ignore[cache-poisoning] test workflow doesn't perform releases
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, '3.10', '3.11']
+        os: [ubuntu-latest]
+        python-version:
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - '3.14'
+        include:
+        - os: ubuntu-22.04
+          python-version: '3.7'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       with:
         python-version: ${{ matrix.python-version }}
         cache: pip
     - name: Update pip
       run: pip install -U pip
-    - name: Install package
-      run: pip install .
-    - name: Lint with black
-      run: |
-        pip install black
-        black --check src/
+    - name: Install package, and lint and test requirements
+      run: pip install
+        --requirement ./tests/requirements.txt
+        pytest pytest-cov .
     - name: Test with pytest
       run: |
-        pip install -r tests/requirements.txt
         pytest -vvra \
           --cov proxpi \
           --cov-report xml \
           --cov-report term \
-          --cov-config setup.cfg
+          --cov-config pyproject.toml
     - name: Upload coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+        token: ${{ secrets.CODECOV_TOKEN }} # zizmor: ignore[secrets-outside-env]
+
+  lint:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version: 3.x
+        cache: pip
+    - name: Update pip
+      run: pip install -U pip
+    - name: Install lint requirements
+      run: pip install black
+    - name: Lint with black
+      run: black --check src/

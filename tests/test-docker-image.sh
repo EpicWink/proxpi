@@ -23,6 +23,7 @@ cleanUp () {
 # Start proxpi server
 container="$(docker create \
   --publish 5042:5000 \
+  ${2:+--platform "$2"} \
   "$1"
 )"
 echo "created container: $container" 1>&2
