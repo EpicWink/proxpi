@@ -348,6 +348,11 @@ def test_package_json(
     server, project, accept, query_format, index_json_response, clear_projects_cache
 ):
     """Test getting package files with JSON API."""
+
+    index_responds_with_json = (
+        index_json_response in {_ResponseType.json, _ResponseType.json_yanked}
+    )
+
     params = None
     headers = None
     if query_format:
@@ -368,7 +373,11 @@ def test_package_json(
     assert "Accept" in vary
 
     response_data = response.json()
-    assert response_data["meta"] == {"api-version": "1.0"}
+
+    assert response_data["meta"] == {
+        "api-version": "1.1" if index_responds_with_json else "1.0",
+    }
+
     assert response_data["name"] == project
 
     for file in response_data["files"]:
@@ -399,11 +408,19 @@ def test_package_json(
     files_by_filename = {f["filename"]: f for f in response_data["files"]}
     if project == "proxpi":
         assert not files_by_filename["proxpi-1.0.0.tar.gz"].get("requires-python")
-
+        if index_responds_with_json:
+            assert set(response_data["versions"]) == {"1.0.0", "1.1.0"}
     elif project == "numpy":
         yanked_file = files_by_filename.pop("numpy-1.23.1-cp310-cp310-win_amd64.whl")
         assert yanked_file.get("yanked")
         assert not any(f.get("yanked") for f in files_by_filename.values())
+        if index_responds_with_json:
+            assert set(response_data["versions"]) == {"1.23.0", "1.23.1"}
+    elif project == "scipy":
+        if index_responds_with_json:
+            assert set(response_data["versions"]) == {"1.9.0"}
+    else:
+        raise RuntimeError(f"Unexpected project: {project}")
 
 
 def test_package_unknown_accept(server):
