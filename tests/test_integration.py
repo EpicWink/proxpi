@@ -26,6 +26,7 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
 class _ResponseType(str, enum.Enum):
     html = "html"
+    html_without_type = "html_without_type"
     json = "json"
     json_yanked = "json_yanked"
 
@@ -71,6 +72,9 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
         ):
             file_name = "index.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
             assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
@@ -79,7 +83,10 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
         path = indexes_dir_path / index_name / file_name
         path.relative_to(indexes_dir_path)  # raises if not relative
 
-        return starlette.responses.FileResponse(path=path, media_type=mime_type)
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
 
     def get_project(
         request: starlette.requests.Request,
@@ -92,6 +99,9 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
         elif current_mock_index_response_type == _ResponseType.json_yanked:
             file_name = "yanked.json"
             mime_type = "application/vnd.pypi.simple.v1+json"
+        elif current_mock_index_response_type == _ResponseType.html_without_type:
+            file_name = "index.html"
+            mime_type = None
         else:
             assert current_mock_index_response_type == _ResponseType.html
             file_name = "index.html"
@@ -100,7 +110,10 @@ def make_mock_index_app(index_name: str) -> starlette.applications.Starlette:
         path = indexes_dir_path / index_name / name / file_name
         path.relative_to(indexes_dir_path)  # raises if not relative
 
-        return starlette.responses.FileResponse(path=path, media_type=mime_type)
+        response = starlette.responses.FileResponse(path=path, media_type=mime_type)
+        if current_mock_index_response_type == _ResponseType.html_without_type:
+            del response.headers["Content-Type"]
+        return response
 
     def get_file(
         request: starlette.requests.Request,
@@ -166,7 +179,8 @@ def clear_projects_cache(server):
 
 @pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
 @pytest.mark.parametrize(
-    "index_json_response", [_ResponseType.html, _ResponseType.json]
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
 )
 def test_list(server, accept, index_json_response, clear_index_cache):
     """Test getting package list."""
@@ -198,7 +212,8 @@ def test_list(server, accept, index_json_response, clear_index_cache):
     "application/vnd.pypi.simple.latest+json",
 ])
 @pytest.mark.parametrize(
-    "index_json_response", [_ResponseType.html, _ResponseType.json]
+    "index_json_response",
+    [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
 )
 def test_list_json(
     server, accept, index_json_response, mock_root_index, clear_index_cache
@@ -223,6 +238,7 @@ def test_list_json(
 ])
 @pytest.mark.parametrize("index_json_response", [
     _ResponseType.html,
+    _ResponseType.html_without_type,
     _ResponseType.json,
     _ResponseType.json_yanked,
 ])  # fmt: skip
