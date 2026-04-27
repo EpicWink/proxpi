@@ -1,30 +1,37 @@
 # proxpi
 [![Build status](
-https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
+https://github.com/EpicWink/proxpi/actions/workflows/test-python-package.yml/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
+[![PyPI - Version](https://img.shields.io/pypi/v/proxpi?logo=pypi)](
+https://pypi.org/project/proxpi/)
 
-PyPI caching mirror
+PyPI caching proxy
 
 * Host a proxy PyPI mirror server with caching
   * Cache the index (project list and projects' file list)
   * Cache the project files
-* Support multiple indices
+* Proxy multiple package indices
+* Provide and consume both JSON and HTML
+  [APIs](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
 * Set index cache times-to-live (individually for each index)
 * Set files cache max-size on disk
 * Manually invalidate index cache
 
-## Installation
-If not using Docker
-```bash
-pip install proxpi
-```
-
-Install `coloredlogs` as well to get coloured logging
+See [Alternatives](#alternatives).
 
 ## Usage
 ### Start server
+Choose between running inside [Docker](https://www.docker.com/) container if you want to
+run in a known-working environment, or outside via a Python app (instructions here are
+for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
+want more control over the environment.
+
+> **Note**: the index cache and the management of the file cache runs in memory, but is
+> not synchronised across multiple processes, so use multiple threads instead of
+> multiple processes. The cache is thread-safe.
+
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 ```bash
@@ -41,6 +48,12 @@ docker compose up
 ```
 
 #### Local
+##### Install
+```bash
+pip install proxpi
+```
+
+##### Run server
 ```bash
 FLASK_APP=proxpi.server flask run
 ```
@@ -156,7 +169,7 @@ This is to be run on a server you have console access to.
        "PIP_INDEX_URL=http://proxpi:5000/index/",
        "PIP_TRUSTED_HOST=proxpi",
      ]
-   
+
    [[runners.docker]]
      network_mode = "gitlab-runner-network"
      ...
@@ -167,3 +180,53 @@ This is designed to not require any changes to the GitLab CI project configurati
 case, you're probably already using a cache).
 
 Another option is to set up a proxy, but that's more effort than the above method.
+
+## Alternatives
+* [simpleindex](https://pypi.org/project/simpleindex/): routes URLs to multiple
+  indices (including PyPI), supports local (or S3 with a plygin) directory of packages,
+  no caching without custom plugins
+
+* [bandersnatch](https://pypi.org/project/bandersnatch/): mirrors one index (eg PyPI),
+  storing packages locally, or on S3 with a plugin. Manual update, no proxy
+
+* [devpi](https://pypi.org/project/devpi/): heavyweight, runs a full index (or multiple)
+  in addition to mirroring (in place of proxying), supports proxying (with inheritance),
+  supports package upload, server replication and fail-over
+
+* [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
+  packages, proxy to PyPI when not-found, supports package upload, no caching
+
+* [`dumb-pypi`](https://pypi.org/project/dumb-pypi/): generates a static website of a
+  package index pointing to statically-located files, no hosting (therefore no caching
+  nor proxying unless configured in server)
+
+* [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
+  directory of packages, with redirecting/cached proxying to indexes, authentication and
+  authorisation.
+
+* [`pypiprivate`](https://pypi.org/project/pypiprivate/): serves local (or S3-hosted)
+  directory of packages, no proxy to package indices (including PyPI)
+
+* [Pulp](https://pypi.org/project/pulpcore/): generic content repository, can host
+  multiple ecosystems' packages.
+  [Python package index plugin](https://pypi.org/project/pulp-python/) supports local/S3
+  mirrors, package upload, proxying to multiple indices, no caching
+
+* [`pip2pi`](https://pypi.org/project/pip2pi/): manual syncing of specific packages,
+  no proxy
+
+* [`nginx_pypi_cache`](https://github.com/hauntsaninja/nginx_pypi_cache): caching proxy
+  using [nginx](https://nginx.org/en/), single index
+
+* [Flask-Pypi-Proxy](https://pypi.org/project/Flask-Pypi-Proxy/): unmaintained, no cache
+  size limit, no caching index pages
+
+* [`http.server`](https://docs.python.org/3/library/http.server.html): standard-library,
+  hosts directory exactly as laid out, no proxy to package indices (eg PyPI)
+
+* [Apache with `mod_rewrite`](
+  https://httpd.apache.org/docs/current/mod/mod_rewrite.html): I'm not familiar with
+  Apache, but it likely has the capability to proxy and cache (with eg `mod_cache_disk`)
+
+* [Gemfury](https://fury.co/l/pypi-server): hosted, managed. Private index is not free,
+  documentation doesn't say anything about proxying
