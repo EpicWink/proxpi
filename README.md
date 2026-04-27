@@ -1,9 +1,11 @@
 # proxpi
 [![Build status](
-https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
+https://github.com/EpicWink/proxpi/actions/workflows/test-python-package.yml/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
 [![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
 https://codecov.io/gh/EpicWink/proxpi)
+[![PyPI - Version](https://img.shields.io/pypi/v/proxpi?logo=pypi)](
+https://pypi.org/project/proxpi/)
 
 PyPI caching proxy
 
@@ -25,6 +27,10 @@ Choose between running inside [Docker](https://www.docker.com/) container if you
 run in a known-working environment, or outside via a Python app (instructions here are
 for the [Flask](https://flask.palletsprojects.com/en/latest/) development server) if you
 want more control over the environment.
+
+> **Note**: the index cache and the management of the file cache runs in memory, but is
+> not synchronised across multiple processes, so use multiple threads instead of
+> multiple processes. The cache is thread-safe.
 
 #### Docker
 Uses a [Gunicorn](https://gunicorn.org/) WSGI server
@@ -95,7 +101,7 @@ change in a package index.
 * `PROXPI_CONNECT_TIMEOUT`: time (in seconds) `proxpi` will wait for a socket to
   connect to the index server before `requests` raises a `ConnectTimeout` error
   to prevent indefinite blocking, default: none, or 3.1 if read-timeout provided
-* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data 
+* `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data
   from the index server before `requests` raises a `ReadTimeout` error to prevent
   indefinite blocking, default: none, or 20 if connect-timeout provided
 
@@ -175,7 +181,7 @@ This is to be run on a server you have console access to.
        "PIP_INDEX_URL=http://proxpi:5000/index/",
        "PIP_TRUSTED_HOST=proxpi",
      ]
-   
+
    [[runners.docker]]
      network_mode = "gitlab-runner-network"
      ...
@@ -201,6 +207,10 @@ Another option is to set up a proxy, but that's more effort than the above metho
 
 * [pypiserver](https://pypi.org/project/pypiserver/): serves local directory of
   packages, proxy to PyPI when not-found, supports package upload, no caching
+
+* [`dumb-pypi`](https://pypi.org/project/dumb-pypi/): generates a static website of a
+  package index pointing to statically-located files, no hosting (therefore no caching
+  nor proxying unless configured in server)
 
 * [PyPI Cloud](https://pypi.org/project/pypicloud/): serves local or cloud-storage
   directory of packages, with redirecting/cached proxying to indexes, authentication and
