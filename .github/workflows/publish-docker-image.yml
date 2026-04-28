@@ -2,8 +2,10 @@ name: publish-docker
 
 on:
   pull_request:
-    branches: [master]
-    paths:
+    branches: &ci-branches
+      - master
+      - ver/*
+    paths: &ci-paths
       - src/**
       - tests/**
       - pyproject.toml
@@ -11,16 +13,10 @@ on:
       - .dockerignore
       - app.requirements.txt
       - Dockerfile
+      - .github/workflows/publish-docker-image.yml
   push:
-    branches: [master]
-    paths:
-      - src/**
-      - tests/**
-      - pyproject.toml
-      - setup.py
-      - .dockerignore
-      - app.requirements.txt
-      - Dockerfile
+    branches: *ci-branches
+    paths: *ci-paths
   release:
     types: [created]
 

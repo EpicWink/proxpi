@@ -2,21 +2,18 @@ name: test
 
 on:
   pull_request:
-    branches:
+    branches: &ci-branches
       - master
-    paths:
+      - ver/*
+    paths: &ci-paths
       - src/**
       - tests/**
       - pyproject.toml
       - setup.py
+      - .github/workflows/test-python-package.yml
   push:
-    branches:
-      - master
-    paths:
-      - src/**
-      - tests/**
-      - pyproject.toml
-      - setup.py
+    branches: *ci-branches
+    paths: *ci-paths
     tags:
       - v* # zizmor: ignore[cache-poisoning] test workflow doesn't perform releases
 
