@@ -4,9 +4,12 @@ on:
   pull_request:
     branches:
       - master
+    paths: &ci-paths
+      - .github/workflows/*
   push:
     branches:
       - master
+    paths: *ci-paths
 
 permissions: {}
 
