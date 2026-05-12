@@ -7,6 +7,7 @@ requires = [
 
 [project]
 name = "proxpi"
+version = "1.3.0"
 
 authors = [
     { name = "Laurie O", email = "laurie_opperman@hotmail.com" },
@@ -30,8 +31,6 @@ keywords = ["pypi", "index", "mirror", "cache"]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = "~= 3.7"
-
-dynamic = ["version"]
 
 [project.optional-dependencies]
 pretty = [

@@ -10,7 +10,7 @@
   v1.1, both as producer and consumer (ie project versions, and file size and
   upload-time)
 
-## 1.3.0 - *unreleased*
+## 1.3.0 - 2026-05-12
 
 ### Changes
 
