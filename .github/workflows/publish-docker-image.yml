@@ -44,18 +44,18 @@ jobs:
 
     - name: Set up QEMU
       if: ${{ matrix.platform.name != 'linux/amd64' }}
-      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
       with:
         platforms: ${{ matrix.platform.name }}
 
     - name: Set up Docker Buildx to support multiple architectures
       if: ${{ matrix.platform.name != 'linux/amd64' }}
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       with:
         platforms: ${{ matrix.platform.name }}
 
     - name: Build ${{ matrix.platform.image-suffix }} for testing
-      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
       with:
         context: .
         load: true
@@ -93,12 +93,12 @@ jobs:
         persist-credentials: false
 
     - name: Set up Docker Buildx to support multiple architectures
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       with:
         platforms: linux/amd64,linux/arm64
 
     - name: Login to DockerHub
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
       with:
         username: epicwink
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -111,7 +111,7 @@ jobs:
         >> "$GITHUB_OUTPUT"
 
     - name: Build and push image for all architectures
-      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
@@ -120,7 +120,7 @@ jobs:
 
     - name: Release image
       if: ${{ github.event_name == 'release' && github.event.isLatest }}
-      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
