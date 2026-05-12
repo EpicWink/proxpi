@@ -22,10 +22,6 @@
 
 * Configure logging level with `PROXPI_LOGGING_LEVEL`
 
-### Fixes
-
-* Support package index HTML responses with no `content-type` header
-
 ### Improvements
 
 * Colour tracebacks if `colored-traceback` is installed (disable with `NO_COLOR=1`)
@@ -39,6 +35,12 @@
 * Test with Python 3.14 in CI, and use in app Docker image
 * Pin `setuptools` build requirement to <81
 * Allow `lxml` v6
+
+## 1.2.3 - 2026-05-12
+
+### Fixes
+
+* Support package index HTML responses with no `content-type` header
 
 ## 1.2.2 - 2025-11-19
 
@@ -65,6 +67,8 @@
 
 ## 1.2 - 2024-07-08
 
+*Changes since version 1.1*
+
 ### Features
 
 * Implement [PEP 714](https://peps.python.org/pep-0714/) - rename `"dist-info-metadata"`
@@ -89,6 +93,21 @@
   lxml v5, Werkzeug v3 in Docker app
 * Added ARM Docker image (https://github.com/EpicWink/proxpi/pull/45)
 * Package build uses [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+
+## 1.1.2 - 2026-05-12
+
+### Fixes
+
+* Use correct environment variable for extra index TTLs
+* Support package index HTML responses with no `content-type` header
+
+### Improvements
+
+* Remove redundant build requirement
+
+### Miscellaneous
+
+* Allow `lxml` v5 and Flask v3, and use in app
 
 ## 1.1 - 2023-05-26
 
