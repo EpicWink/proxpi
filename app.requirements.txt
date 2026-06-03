@@ -5,29 +5,29 @@
 # os_name: posix
 # platform_machine: x86_64
 # platform_python_implementation: CPython
-# platform_release: 6.17.0-23-generic
+# platform_release: 7.0.0-22-generic
 # platform_system: Linux
-# platform_version: #23~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Apr 14 16:11:48 UTC 2
+# platform_version: #22-Ubuntu SMP PREEMPT_DYNAMIC Mon May 25 15:54:34 UTC 2026
 # python_full_version: 3.14.5
 # python_version: 3.14
 # sys_platform: linux
 #
-# pip_version: 26.1.1
+# pip_version: 26.1.2
 #
-# command: pip install --only-binary :all: --python-version 3.14 --implementation cp gunicorn '.[pretty]' --platform musllinux_1_2_aarch64 --platform musllinux_1_2_x86_64
+# command: pip install --only-binary :all: --platform musllinux_1_2_aarch64 --platform musllinux_1_2_x86_64 --python-version 3.14 --implementation cp --uploaded-prior-to P3D gunicorn '.[pretty]'
 
 blinker==1.9.0 \
     --hash=sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc
     # via flask
-certifi==2026.4.22 \
-    --hash=sha256:3cb2210c8f88ba2318d29b0388d1023c8492ff72ecdde4ebdaddbb13a31b1c4a
+certifi==2026.5.20 \
+    --hash=sha256:3c52e209ba0a4ad7aebe60436a4ab349c39e1e602e8c134221e546902ad25897
     # via requests
 charset-normalizer==3.4.7 \
     --hash=sha256:e8ac484bf18ce6975760921bb6148041faa8fef0547200386ea0b52b5d27bf7b \
     --hash=sha256:7579e913a5339fb8fa133f6bbcfd8e6749696206cf05acdbdca71a1b436d8e72
     # via requests
-click==8.3.3 \
-    --hash=sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613
+click==8.4.1 \
+    --hash=sha256:482be17c6991b8c19c5429a1e995d9b0efdbb63172824c41f99965dc0ade8ec2
     # via flask
 colored-traceback==0.4.2 \
     --hash=sha256:8ad752a5b3c4e50bccd99d4a2d01e16d80926b519e07a85437ecbf8b4f8ce884
@@ -43,8 +43,8 @@ gunicorn==26.0.0 \
 humanfriendly==10.0 \
     --hash=sha256:1697e1a8a8f550fd43c2865cd84542fc175a61dcb779b6fee18cf6b6ccba1477
     # via coloredlogs
-idna==3.14 \
-    --hash=sha256:e677eaf072e290f7b725f9acf0b3a2bd55f9fd6f7c70abe5f0e34823d0accf69
+idna==3.17 \
+    --hash=sha256:466e48829084efe2548012b855df21540b96f2e20e51bd124c851536556a592c
     # via requests
 itsdangerous==2.2.0 \
     --hash=sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef
@@ -54,9 +54,9 @@ jinja2==3.1.6 \
     # via
     #   flask
     #   proxpi (setup.py)
-lxml==6.1.0 \
-    --hash=sha256:32662519149fd7a9db354175aa5e417d83485a8039b8aaa62f873ceee7ea4cad \
-    --hash=sha256:89e8d73d09ac696a5ba42ec69787913d53284f12092f651506779314f10ba585
+lxml==6.1.1 \
+    --hash=sha256:19607c6bbff2a44cf3fe8250abccd20942d3462473e0a721d01d379ed017e462 \
+    --hash=sha256:63876be28efefa04a1df615b46770e82042cce445cfdce55160522f57b231ccb
     # via proxpi (setup.py)
 markupsafe==3.0.3 \
     --hash=sha256:ec15a59cf5af7be74194f7ab02d0f59a62bdcf1a537677ce67a2537c9b87fcda \
@@ -71,8 +71,8 @@ packaging==26.2 \
 pygments==2.20.0 \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
     # via colored-traceback
-requests==2.34.0 \
-    --hash=sha256:917520a21b767485ce7c588f4ebb917c436b24a31231b44228715eaeb5a52c60
+requests==2.34.2 \
+    --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
     # via proxpi (setup.py)
 urllib3==2.7.0 \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
