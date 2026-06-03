@@ -1,4 +1,4 @@
-hypercorn >= 0.14, < 2.0
+hypercorn >= 0.17.3, < 2.0
 packaging
 pytest
 pytest-cov
