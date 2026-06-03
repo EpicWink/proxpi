@@ -58,10 +58,6 @@ jobs:
           --cov-report xml \
           --cov-report term \
           --cov-config pyproject.toml
-    - name: Upload coverage
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }} # zizmor: ignore[secrets-outside-env]
 
   lint:
     permissions:
