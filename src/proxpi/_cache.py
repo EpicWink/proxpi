@@ -17,6 +17,7 @@ import urllib.parse
 
 import requests
 import lxml.etree
+import sqlitedict
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
@@ -506,26 +507,49 @@ class _IndexCache:
     index_url: str
     ttl: int
     session: requests.Session
-    _index_t: t.Union[float, None]
+    cache_file: str
     _index_lock: threading.Lock
+    _index_metadata: t.MutableMapping[str, t.Union[float, None]]
+    _index: t.MutableMapping[str, str]
     _package_locks: _Locks
-    _index: t.Dict[str, str]
-    _packages: t.Dict[str, Package]
+    _packages: t.MutableMapping[str, Package]
     _headers = {"Accept": (
         "application/vnd.pypi.simple.v1+json, "
         "application/vnd.pypi.simple.v1+html;q=0.1"
     )}  # fmt: skip
     _stats: _CacheStats
 
-    def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
+    def __init__(
+        self,
+        index_url: str,
+        ttl: int,
+        session: requests.Session = None,
+        cache_dir: t.Union[str, None] = None,
+    ):
         self.index_url = index_url
         self.ttl = ttl
         self.session = session or requests.Session()
-        self._index_t = None
+        parsed = urllib.parse.urlparse(index_url)
+        slug = re.sub(r"[^\w.-]", "_", f"{parsed.hostname}/{parsed.path}")
+        slug = slug.strip("_")[:64]
+        self.cache_file = os.path.join(
+            cache_dir or tempfile.mkdtemp(), f"index_{slug}.sqlite"
+        )
         self._index_lock = threading.Lock()
+        self._index_metadata = sqlitedict.SqliteDict(
+            self.cache_file,
+            tablename="index_metadata",
+            autocommit=True,
+            outer_stack=False,
+        )
+        self._index_metadata.setdefault("timestamp", None)  # in case timestamp is new
+        self._index = sqlitedict.SqliteDict(
+            self.cache_file, tablename="index", outer_stack=False
+        )
         self._package_locks = _Locks()
-        self._index = {}
-        self._packages = {}
+        self._packages = sqlitedict.SqliteDict(
+            self.cache_file, tablename="packages", autocommit=True, outer_stack=False
+        )
         self._index_url_masked = _mask_password(index_url)
         self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
 
@@ -534,7 +558,10 @@ class _IndexCache:
 
     def _list_packages(self):
         """List projects using or updating cache."""
-        if self._index_t is not None and _now() < self._index_t + self.ttl:
+        if (
+            self._index_metadata["timestamp"] is not None
+            and _now() < self._index_metadata["timestamp"] + self.ttl
+        ):
             self._stats.add_hit(key="<index>")
             return
         self._stats.add_miss(key="<index>")
@@ -542,16 +569,21 @@ class _IndexCache:
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = self.session.get(self.index_url, headers=self._headers, stream=True)
         response.raise_for_status()
-        self._index_t = _now()
+        self._index_metadata["timestamp"] = _now()
 
         if (
             response.headers.get("Content-Type")
             == "application/vnd.pypi.simple.v1+json"
         ):
             response_data = response.json()
+
+            data = {}
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
-                self._index[name_normalised] = f"{name_normalised}/"
+                data[name_normalised] = f"{name_normalised}/"
+
+            self._index.update(data)
+            self._index.commit()
             logger.debug(
                 f"Finished listing packages in index '{self._index_url_masked}'",
             )
@@ -559,10 +591,15 @@ class _IndexCache:
 
         stream = _ResponseReader.from_response(response)
 
+        data = {}
         for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
-                self._index[name] = child.attrib["href"]
+                data[name] = child.attrib["href"]
+
+        self._index.update(data)
+        self._index.commit()
+
         logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
 
     def list_packages(self) -> t.KeysView[str]:
@@ -587,9 +624,9 @@ class _IndexCache:
         Returns:
             names of projects in index
         """
-
         with self._index_lock:
             self._list_packages()
+
         return self._index.keys()
 
     def _list_files(self, package_name: str):
@@ -602,7 +639,10 @@ class _IndexCache:
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
-        if self._index_t is None or _now() > self._index_t + self.ttl:
+        if (
+            self._index_metadata["timestamp"] is None
+            or _now() > self._index_metadata["timestamp"] + self.ttl
+        ):
             url = urllib.parse.urljoin(self.index_url, package_name)
             logger.debug(f"Refreshing '{package_name}'")
             response = self.session.get(url, headers=self._headers, stream=True)
@@ -626,11 +666,12 @@ class _IndexCache:
             for file_data in response_data["files"]:
                 file = FileFromJSON.from_json_response(file_data, response.request.url)
                 package.files[file.name] = file
-            self._packages[package_name] = package
+
             if _parse_version(
                 (response_data.get("meta") or {}).get("api-version") or "1.0",
             ) >= (1, 1):
                 package.versions = response_data.get("versions")
+            self._packages[package_name] = package
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
@@ -655,7 +696,6 @@ class _IndexCache:
         Raises:
             NotFound: if project doesn't exist in index
         """
-
         with self._package_locks[package_name]:
             self._list_files(package_name)
         return self._packages[package_name]
@@ -693,11 +733,10 @@ class _IndexCache:
 
     def invalidate_list(self):
         """Invalidate package list cache."""
-        if self._index_lock.locked():
-            logger.info("Index already undergoing update")
-            return
-        self._index_t = None
-        self._index = {}
+        with self._index_lock:
+            self._index_metadata["timestamp"] = None
+            self._index.clear()
+            self._index.commit()
 
     def invalidate_package(self, package_name: str):
         """Invalidate package file list cache.
@@ -721,12 +760,8 @@ class _IndexCache:
         Args:
             name: project name
         """
-
-        package_name = name
-        if self._package_locks[package_name].locked():
-            logger.info(f"Project '{name}' files already undergoing update")
-            return
-        self._packages.pop(package_name, None)
+        with self._package_locks[name]:
+            self._packages.pop(name, None)
 
 
 @dataclasses.dataclass
@@ -980,7 +1015,7 @@ class Cache:
         elif READ_TIMEOUT:
             session.default_timeout = (3.1, READ_TIMEOUT)
 
-        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
+        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session, CACHE_DIR)
         file_cache = cls._file_cache_cls(
             CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
         )
@@ -990,7 +1025,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl, session)
+            cls._index_cache_cls(url, ttl, session, CACHE_DIR)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)

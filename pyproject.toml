@@ -24,6 +24,7 @@ dependencies = [
     "jinja2 ~= 3.0",
     "lxml >= 4.8, < 7.0",
     "requests ~= 2.27",
+    "sqlitedict >= 2.0, < 3.0",
 ]
 description = "PyPI caching mirror"
 keywords = ["pypi", "index", "mirror", "cache"]
