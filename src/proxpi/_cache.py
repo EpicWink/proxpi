@@ -510,7 +510,7 @@ class _PersistentDict(collections.abc.MutableMapping):
         self.conn.execute("PRAGMA synchronous = NORMAL;")
         self.conn.execute("PRAGMA journal_mode = WAL;")
 
-        self.table_name = "t"
+        self.table_name = "data"
         self.encode = pickle.dumps
         self.decode = pickle.loads
 
@@ -616,15 +616,15 @@ class _IndexCache:
                 "-", f"{parsed.hostname}/{parsed.path}"
             )
             slug = slug.strip("-")
-            self.cache_dir = os.path.join(cache_dir, slug)
-            os.makedirs(self.cache_dir, exist_ok=True)
+            cache_dir = os.path.join(cache_dir, slug)
+            os.makedirs(cache_dir, exist_ok=True)
 
             self._index_metadata = _PersistentDict(
-                os.path.join(self.cache_dir, "metadata.db")
+                os.path.join(cache_dir, "metadata.db")
             )
-            self._index = _PersistentDict(os.path.join(self.cache_dir, "index.db"))
+            self._index = _PersistentDict(os.path.join(cache_dir, "index.db"))
             self._packages = _PersistentDict(
-                os.path.join(self.cache_dir, "packages.db")
+                os.path.join(cache_dir, "packages.db")
             )
         else:
             self._index_metadata = {}
