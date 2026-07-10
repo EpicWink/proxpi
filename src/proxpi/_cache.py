@@ -546,9 +546,9 @@ class _PersistentDict(collections.abc.MutableMapping):
         return (row[0] for row in cursor)
 
     def __len__(self):
-        return self.conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[
-            0
-        ]
+        return self.conn.execute(
+            f"SELECT COUNT(*) FROM {self.table_name}"
+        ).fetchone()[0]  # fmt: skip
 
     def clear(self):
         self.conn.execute(f"DELETE FROM {self.table_name}")
@@ -579,11 +579,10 @@ class _IndexCache:
     index_url: str
     ttl: int
     session: requests.Session
-    cache_file: str
     _index_lock: threading.Lock
+    _package_locks: _Locks
     _index_metadata: t.MutableMapping[str, t.Union[float, None]]
     _index: t.MutableMapping[str, str]
-    _package_locks: _Locks
     _packages: t.MutableMapping[str, Package]
     _headers = {"Accept": (
         "application/vnd.pypi.simple.v1+json, "
