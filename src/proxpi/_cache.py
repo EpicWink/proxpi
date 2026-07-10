@@ -499,6 +499,11 @@ class _ResponseReader:
 
 
 class _PersistentDict(collections.abc.MutableMapping):
+    """Persist dict in a sqlite database.
+
+    - Keys are expected to be strings.
+    - Thread-safety must be handled by the caller.
+    """
 
     def __init__(self, path: str):
         self.conn = sqlite3.connect(path, check_same_thread=False)
