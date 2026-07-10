@@ -4,9 +4,11 @@ import os
 import re
 import abc
 import time
+import pickle
 import shutil
 import typing as t
 import logging
+import sqlite3
 import tempfile
 import warnings
 import functools
@@ -14,10 +16,10 @@ import posixpath
 import threading
 import dataclasses
 import urllib.parse
+import collections.abc
 
 import requests
 import lxml.etree
-import sqlitedict
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
@@ -41,6 +43,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
+INDEX_CACHE_DIR = os.environ.get("PROXPI_INDEX_CACHE_DIR")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 CONNECT_TIMEOUT = (
@@ -495,6 +498,75 @@ class _ResponseReader:
             return b""
 
 
+class _PersistentDict(collections.abc.MutableMapping):
+
+    def __init__(self, path: str):
+        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn.execute("PRAGMA synchronous = NORMAL;")
+        self.conn.execute("PRAGMA journal_mode = WAL;")
+
+        self.table_name = "t"
+        self.encode = pickle.dumps
+        self.decode = pickle.loads
+
+        self.conn.execute(
+            f"CREATE TABLE IF NOT EXISTS {self.table_name} (key BLOB PRIMARY KEY, value BLOB)"
+        )
+
+    def __getitem__(self, key):
+        item = self.conn.execute(
+            f"SELECT value FROM {self.table_name} WHERE key = ?", (key,)
+        ).fetchone()
+        if item is None:
+            raise KeyError(key)
+        return self.decode(item[0])
+
+    def __contains__(self, key):
+        result = self.conn.execute(
+            f"SELECT 1 FROM {self.table_name} WHERE key = ?", (key,)
+        ).fetchone()
+        return result is not None
+
+    def __setitem__(self, key, value):
+        self.conn.execute(
+            f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
+            (key, self.encode(value)),
+        )
+        self.conn.commit()
+
+    def __delitem__(self, key):
+        if key not in self:
+            raise KeyError(key)
+
+        self.conn.execute(f"DELETE FROM {self.table_name} WHERE key = ?", (key,))
+        self.conn.commit()
+
+    def __iter__(self):
+        cursor = self.conn.execute(f"SELECT key FROM {self.table_name}")
+        return (row[0] for row in cursor)
+
+    def __len__(self):
+        return self.conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[
+            0
+        ]
+
+    def clear(self):
+        self.conn.execute(f"DELETE FROM {self.table_name}")
+        self.conn.commit()
+
+    def update(self, iterable):
+        if hasattr(iterable, "items"):
+            iterable = iterable.items()
+
+        iterable = ((k, self.encode(v)) for k, v in iterable)
+
+        self.conn.executemany(
+            f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
+            iterable,
+        )
+        self.conn.commit()
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -529,29 +601,33 @@ class _IndexCache:
         self.index_url = index_url
         self.ttl = ttl
         self.session = session or requests.Session()
-        parsed = urllib.parse.urlparse(index_url)
-        slug = re.sub(r"[^\w.-]", "_", f"{parsed.hostname}/{parsed.path}")
-        slug = slug.strip("_")[:64]
-        self.cache_file = os.path.join(
-            cache_dir or tempfile.mkdtemp(), f"index_{slug}.sqlite"
-        )
         self._index_lock = threading.Lock()
-        self._index_metadata = sqlitedict.SqliteDict(
-            self.cache_file,
-            tablename="index_metadata",
-            autocommit=True,
-            outer_stack=False,
-        )
-        self._index_metadata.setdefault("timestamp", None)  # in case timestamp is new
-        self._index = sqlitedict.SqliteDict(
-            self.cache_file, tablename="index", outer_stack=False
-        )
         self._package_locks = _Locks()
-        self._packages = sqlitedict.SqliteDict(
-            self.cache_file, tablename="packages", autocommit=True, outer_stack=False
-        )
         self._index_url_masked = _mask_password(index_url)
         self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
+
+        if cache_dir is not None:
+            parsed = urllib.parse.urlparse(index_url)
+            slug = _hostname_normalise_pattern.sub(
+                "-", f"{parsed.hostname}/{parsed.path}"
+            )
+            slug = slug.strip("-")
+            self.cache_dir = os.path.join(cache_dir, slug)
+            os.makedirs(self.cache_dir, exist_ok=True)
+
+            self._index_metadata = _PersistentDict(
+                os.path.join(self.cache_dir, "metadata.db")
+            )
+            self._index = _PersistentDict(os.path.join(self.cache_dir, "index.db"))
+            self._packages = _PersistentDict(
+                os.path.join(self.cache_dir, "packages.db")
+            )
+        else:
+            self._index_metadata = {}
+            self._index = {}
+            self._packages = {}
+
+        self._index_metadata.setdefault("timestamp", None)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
@@ -583,7 +659,6 @@ class _IndexCache:
                 data[name_normalised] = f"{name_normalised}/"
 
             self._index.update(data)
-            self._index.commit()
             logger.debug(
                 f"Finished listing packages in index '{self._index_url_masked}'",
             )
@@ -598,7 +673,6 @@ class _IndexCache:
                 data[name] = child.attrib["href"]
 
         self._index.update(data)
-        self._index.commit()
 
         logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
 
@@ -733,10 +807,12 @@ class _IndexCache:
 
     def invalidate_list(self):
         """Invalidate package list cache."""
-        with self._index_lock:
-            self._index_metadata["timestamp"] = None
-            self._index.clear()
-            self._index.commit()
+        if self._index_lock.locked():
+            logger.info("Index already undergoing update")
+            return
+
+        self._index_metadata["timestamp"] = None
+        self._index.clear()
 
     def invalidate_package(self, package_name: str):
         """Invalidate package file list cache.
@@ -760,8 +836,12 @@ class _IndexCache:
         Args:
             name: project name
         """
-        with self._package_locks[name]:
-            self._packages.pop(name, None)
+
+        if self._package_locks[name].locked():
+            logger.info(f"Project '{name}' files already undergoing update")
+            return
+
+        self._packages.pop(name, None)
 
 
 @dataclasses.dataclass
@@ -1015,7 +1095,9 @@ class Cache:
         elif READ_TIMEOUT:
             session.default_timeout = (3.1, READ_TIMEOUT)
 
-        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session, CACHE_DIR)
+        root_cache = cls._index_cache_cls(
+            INDEX_URL, INDEX_TTL, session, INDEX_CACHE_DIR
+        )
         file_cache = cls._file_cache_cls(
             CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
         )
@@ -1025,7 +1107,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl, session, CACHE_DIR)
+            cls._index_cache_cls(url, ttl, session, INDEX_CACHE_DIR)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
