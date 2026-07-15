@@ -43,7 +43,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
-INDEX_CACHE_DIR = os.environ.get("PROXPI_INDEX_CACHE_DIR")
+INDEX_CACHE_FILE = os.environ.get("PROXPI_INDEX_CACHE_FILE")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 CONNECT_TIMEOUT = (
@@ -503,19 +503,19 @@ class _PersistentDict(collections.abc.MutableMapping):
 
     - Keys are expected to be strings.
     - Thread-safety must be handled by the caller.
+
+    Inspired by: https://github.com/piskvorky/sqlitedict
     """
 
-    def __init__(self, path: str):
-        self.conn = sqlite3.connect(path, check_same_thread=False)
-        self.conn.execute("PRAGMA synchronous = NORMAL;")
-        self.conn.execute("PRAGMA journal_mode = WAL;")
-
-        self.table_name = "data"
+    def __init__(self, conn: sqlite3.Connection, table_name: str) -> None:
+        self.conn = conn
+        self.table_name = table_name
         self.encode = pickle.dumps
         self.decode = pickle.loads
 
+    def ensure_initialised(self) -> None:
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.table_name} (key BLOB PRIMARY KEY, value BLOB)"
+            f"CREATE TABLE IF NOT EXISTS {self.table_name} (key TEXT PRIMARY KEY, value BLOB)"
         )
 
     def __getitem__(self, key):
@@ -600,7 +600,7 @@ class _IndexCache:
         index_url: str,
         ttl: int,
         session: requests.Session = None,
-        cache_dir: t.Union[str, None] = None,
+        cache_file: t.Union[str, None] = None,
     ):
         self.index_url = index_url
         self.ttl = ttl
@@ -610,22 +610,23 @@ class _IndexCache:
         self._index_url_masked = _mask_password(index_url)
         self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
 
-        if cache_dir is not None:
+        if cache_file is not None:
             parsed = urllib.parse.urlparse(index_url)
             slug = _hostname_normalise_pattern.sub(
-                "-", f"{parsed.hostname}/{parsed.path}"
-            )
-            slug = slug.strip("-")
-            cache_dir = os.path.join(cache_dir, slug)
-            os.makedirs(cache_dir, exist_ok=True)
+                "_", f"{parsed.hostname}/{parsed.path}"
+            ).strip("_")
 
-            self._index_metadata = _PersistentDict(
-                os.path.join(cache_dir, "metadata.db")
-            )
-            self._index = _PersistentDict(os.path.join(cache_dir, "index.db"))
-            self._packages = _PersistentDict(
-                os.path.join(cache_dir, "packages.db")
-            )
+            conn = sqlite3.connect(cache_file, check_same_thread=False)
+            conn.execute("PRAGMA synchronous = NORMAL;")
+            conn.execute("PRAGMA journal_mode = WAL;")
+
+            self._index_metadata = _PersistentDict(conn, f"{slug}_metadata")
+            self._index = _PersistentDict(conn, f"{slug}_index")
+            self._packages = _PersistentDict(conn, f"{slug}_packages")
+
+            self._index_metadata.ensure_initialised()
+            self._index.ensure_initialised()
+            self._packages.ensure_initialised()
         else:
             self._index_metadata = {}
             self._index = {}
@@ -1100,7 +1101,7 @@ class Cache:
             session.default_timeout = (3.1, READ_TIMEOUT)
 
         root_cache = cls._index_cache_cls(
-            INDEX_URL, INDEX_TTL, session, INDEX_CACHE_DIR
+            INDEX_URL, INDEX_TTL, session, INDEX_CACHE_FILE
         )
         file_cache = cls._file_cache_cls(
             CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
@@ -1111,7 +1112,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl, session, INDEX_CACHE_DIR)
+            cls._index_cache_cls(url, ttl, session, INDEX_CACHE_FILE)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
