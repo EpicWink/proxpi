@@ -22,9 +22,9 @@ blinker==1.9.0 \
 certifi==2026.6.17 \
     --hash=sha256:2227dcbaafe0d2f59279d1762ddddc37783ed4354594f194ffc31d20f41fc3db
     # via requests
-charset-normalizer==3.4.7 \
-    --hash=sha256:e8ac484bf18ce6975760921bb6148041faa8fef0547200386ea0b52b5d27bf7b \
-    --hash=sha256:7579e913a5339fb8fa133f6bbcfd8e6749696206cf05acdbdca71a1b436d8e72
+charset-normalizer==3.4.9 \
+    --hash=sha256:a4cfde78a9f2880208d16a93b795726a3017d5977e08d1e162a7a31322479c41 \
+    --hash=sha256:898f0e9068ca27d37f8e83a5b962821df851532e6c4a7d615c1c033f9da6eedf
     # via requests
 click==8.4.2 \
     --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
