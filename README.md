@@ -80,10 +80,14 @@ If you need to invalidate a locally cached file, restart the server: files shoul
 change in a package index.
 
 ### Environment variables
-* `PROXPI_INDEX_URL`: index URL, default: https://pypi.org/simple/
+* `PROXPI_INDEX_URL`: index
+  [base](https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references)
+  URL, default: https://pypi.org/simple/
 * `PROXPI_INDEX_TTL`: index cache time-to-live in seconds,
    default: 30 minutes. Disable index-cache by setting this to 0
-* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (comma-separated)
+* `PROXPI_EXTRA_INDEX_URLS`: extra index
+  [base](https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references)
+  URLs (comma-separated)
 * `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index cache times-to-live in seconds
    (comma-separated), default: 3 minutes, cache disabled when 0
 * `PROXPI_CACHE_SIZE`: size of downloaded project files cache (bytes), default 5GB.
