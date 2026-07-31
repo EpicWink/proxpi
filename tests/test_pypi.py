@@ -13,6 +13,12 @@ from . import _utils
 logging.root.setLevel(logging.DEBUG)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
 
+_date_limit = "2025-01-01"
+_expected_jinja2_version = "3.1.5"
+if sys.version_info >= (3, 14):
+    _date_limit = "2026-01-01"
+    _expected_jinja2_version = "3.1.6"
+
 
 @pytest.fixture(scope="module")
 def server():
@@ -21,7 +27,7 @@ def server():
 
 @pytest.mark.parametrize(("uploaded_prior_to", "expected_jinja2_version"), [
     pytest.param(None, None, id="latest"),
-    pytest.param("2025-01-01", "3.1.5", id="date_bound"),
+    pytest.param(_date_limit,_expected_jinja2_version, id="date_bound"),
 ])  # fmt: skip
 def test_pip_download(
     server,
@@ -34,6 +40,8 @@ def test_pip_download(
         sys.executable,
         "-m",
         "pip",
+        "--verbose",
+        "--verbose",
         "--no-cache-dir",
         "download",
         "--index-url", f"{server}/index/",
