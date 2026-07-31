@@ -14,11 +14,17 @@
 #
 # pip_version: 26.2
 #
-# command: pip install --only-binary :all: --platform musllinux_1_2_aarch64 --platform musllinux_1_2_x86_64 --python-version 3.14.6 --implementation cp --uploaded-prior-to P7D gunicorn '.[pretty]'
+# command: pip install --only-binary :all: --python-version 3.14.6 --implementation cp --platform musllinux_1_1_aarch64 --platform musllinux_1_2_aarch64 --platform musllinux_1_1_x86_64 --platform musllinux_1_2_x86_64 --uploaded-prior-to P7D gunicorn '.[pretty]'
 
-blinker==1.9.0 \
-    --hash=sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc
-    # via flask
+annotated-doc==0.0.4 \
+    --hash=sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320
+    # via fastapi
+annotated-types==0.8.0 \
+    --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
+    # via pydantic
+anyio==4.14.2 \
+    --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
+    # via starlette
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
     # via requests
@@ -26,17 +32,14 @@ charset-normalizer==3.4.9 \
     --hash=sha256:a4cfde78a9f2880208d16a93b795726a3017d5977e08d1e162a7a31322479c41 \
     --hash=sha256:898f0e9068ca27d37f8e83a5b962821df851532e6c4a7d615c1c033f9da6eedf
     # via requests
-click==8.4.2 \
-    --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
-    # via flask
 colored-traceback==0.4.2 \
     --hash=sha256:8ad752a5b3c4e50bccd99d4a2d01e16d80926b519e07a85437ecbf8b4f8ce884
     # via proxpi (setup.py)
 coloredlogs==15.0.1 \
     --hash=sha256:612ee75c546f53e92e70049c9dbfcc18c935a2b9a53b66085ce9ef6a6e5c0934
     # via proxpi (setup.py)
-flask==3.1.3 \
-    --hash=sha256:f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c
+fastapi==0.139.2 \
+    --hash=sha256:b9ad015a835173d59865e2f5d8296fbc2b317bf56a2ba1a5bfbdd03de2fd4b1c
     # via proxpi (setup.py)
 gunicorn==26.0.0 \
     --hash=sha256:40233d26a5f0d1872916188c276e21641155111c2853f0c2cd55260aec0d24fc
@@ -45,15 +48,12 @@ humanfriendly==10.0 \
     # via coloredlogs
 idna==3.18 \
     --hash=sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2
-    # via requests
-itsdangerous==2.2.0 \
-    --hash=sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef
-    # via flask
+    # via
+    #   anyio
+    #   requests
 jinja2==3.1.6 \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
-    # via
-    #   flask
-    #   proxpi (setup.py)
+    # via proxpi (setup.py)
 lxml==6.1.1 \
     --hash=sha256:19607c6bbff2a44cf3fe8250abccd20942d3462473e0a721d01d379ed017e462 \
     --hash=sha256:63876be28efefa04a1df615b46770e82042cce445cfdce55160522f57b231ccb
@@ -61,22 +61,38 @@ lxml==6.1.1 \
 markupsafe==3.0.3 \
     --hash=sha256:ec15a59cf5af7be74194f7ab02d0f59a62bdcf1a537677ce67a2537c9b87fcda \
     --hash=sha256:2713baf880df847f2bece4230d4d094280f4e67b1e813eec43b4c0e144a34ffe
-    # via
-    #   flask
-    #   jinja2
-    #   werkzeug
+    # via jinja2
 packaging==26.2 \
     --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e
     # via gunicorn
+pydantic==2.13.4 \
+    --hash=sha256:45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba
+    # via fastapi
+pydantic-core==2.46.4 \
+    --hash=sha256:3fb702cd90b0446a3a1c5e470bfa0dd23c0233b676a9099ddcc964fa6ca13898 \
+    --hash=sha256:372429a130e469c9cd698925ce5fc50940b7a1336b0d82038e63d5bbc4edc519
+    # via pydantic
 pygments==2.20.0 \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
     # via colored-traceback
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
     # via proxpi (setup.py)
+starlette==1.3.1 \
+    --hash=sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6
+    # via fastapi
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+    # via
+    #   fastapi
+    #   pydantic
+    #   pydantic-core
+    #   typing-inspection
+typing-inspection==0.4.2 \
+    --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7
+    # via
+    #   fastapi
+    #   pydantic
 urllib3==2.7.0 \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
     # via requests
-werkzeug==3.1.8 \
-    --hash=sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50
-    # via flask

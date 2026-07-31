@@ -20,7 +20,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-    "flask >= 2.0, < 4.0",
+    "fastapi >= 0.100, < 2.0",
+    'importlib-resources; python_version < "3.9"',
     "jinja2 ~= 3.0",
     "lxml >= 4.8, < 7.0",
     "requests ~= 2.27",
