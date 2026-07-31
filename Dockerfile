@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM python:3.14-alpine AS build
 
 RUN \
@@ -36,4 +38,4 @@ ENTRYPOINT [ \
     "--logger-class", "proxpi.server._GunicornLogger", \
     "proxpi.server:app" \
 ]
-CMD ["--bind", "0.0.0.0:5000", "--threads", "2"]
+CMD ["--bind", "0.0.0.0:5000", "--threads", "2", "--no-control-socket"]

@@ -74,10 +74,11 @@ class Thread(threading.Thread):
 
 
 def make_server(app: "hypercorn.typing.Framework") -> t.Generator[str, None, None]:
-    async def serve():
-        nonlocal shutdown_future
-        shutdown_future = asyncio.Future()  # create in same asyncio loop
+    async def wait() -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, shutdown_event.wait)
 
+    async def serve():
         # Can't use `hypercorn.asyncio.serve` as it creates the socket internally, so
         # we never know the randomly-assigned port
         await hypercorn.asyncio.run.worker_serve(
@@ -91,7 +92,7 @@ def make_server(app: "hypercorn.typing.Framework") -> t.Generator[str, None, Non
                 "errorlog": logging.getLogger("hypercorn.error"),
             }),
             sockets=hypercorn_sockets,
-            shutdown_trigger=lambda: shutdown_future,
+            shutdown_trigger=wait,
         )  # fmt: skip
 
     sock = socket.socket()
@@ -101,12 +102,14 @@ def make_server(app: "hypercorn.typing.Framework") -> t.Generator[str, None, Non
         secure_sockets=[], insecure_sockets=[sock], quic_sockets=[]
     )
 
-    shutdown_future = None  # type: t.Union[asyncio.Future, None]
+    shutdown_event = threading.Event()
     thread = Thread(target=asyncio.run, args=(serve(),))
     thread.start()
     time.sleep(0.01)
-    yield f"http://localhost:{port}"
-    shutdown_future.set_result(None)
+    try:
+        yield f"http://localhost:{port}"
+    finally:
+        shutdown_event.set()
     thread.join(timeout=0.1)
     if thread.exc:
         raise thread.exc
