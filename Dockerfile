@@ -1,16 +1,27 @@
-FROM python:3.12-alpine AS build
+# syntax=docker/dockerfile:1
+
+FROM python:3.14-alpine AS build
+
+RUN \
+    uname -a && cat /etc/issue && apk --version \
+ && apk --no-cache add git \
+ && git --version
+
+RUN \
+    --mount=type=cache,target=/root/.cache/pip \
+    uname -a && cat /etc/issue && python --version && pip --version \
+ && pip install build \
+ && python -m build --version
 
 RUN \
     --mount=type=cache,target=/root/.cache/pip \
     --mount=source=.,target=/root/src/proxpi,rw \
-    uname -a && cat /etc/issue && apk --version && python --version && pip --version \
- && apk --no-cache add git \
+    uname -a && cat /etc/issue && python --version && pip --version \
  && git -C /root/src/proxpi restore .dockerignore \
- && pip install build \
  && python -m build --outdir /srv/proxpi/dist /root/src/proxpi \
  && ls /srv/proxpi/dist
 
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 
 RUN \
     --mount=type=cache,target=/root/.cache/pip \
@@ -34,6 +45,7 @@ ENTRYPOINT [ \
     "--access-logfile", "-", \
     "--access-logformat", "%(h)s \"%(r)s\" %(s)s %(b)s %(M)dms", \
     "--logger-class", "proxpi.server._GunicornLogger", \
+    "--worker-class", "asgi", \
     "proxpi.server:app" \
 ]
-CMD ["--bind", "0.0.0.0:5000", "--threads", "2"]
+CMD ["--bind", "0.0.0.0:5000", "--threads", "2", "--no-control-socket"]

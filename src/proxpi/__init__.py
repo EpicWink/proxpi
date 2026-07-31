@@ -2,6 +2,4 @@
 
 __all__ = ["File", "Cache", "NotFound"]
 
-from ._cache import File
-from ._cache import Cache
-from ._cache import NotFound
+from ._cache import Cache, File, NotFound
