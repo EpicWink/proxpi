@@ -1,9 +1,7 @@
 # proxpi
 [![Build status](
-https://github.com/EpicWink/proxpi/workflows/test/badge.svg?branch=master)](
+https://github.com/EpicWink/proxpi/actions/workflows/test-python-package.yml/badge.svg?branch=master)](
 https://github.com/EpicWink/proxpi/actions?query=branch%3Amaster+workflow%3Atest)
-[![codecov](https://codecov.io/gh/EpicWink/proxpi/branch/master/graph/badge.svg)](
-https://codecov.io/gh/EpicWink/proxpi)
 [![PyPI - Version](https://img.shields.io/pypi/v/proxpi?logo=pypi)](
 https://pypi.org/project/proxpi/)
 
@@ -82,10 +80,14 @@ If you need to invalidate a locally cached file, restart the server: files shoul
 change in a package index.
 
 ### Environment variables
-* `PROXPI_INDEX_URL`: index URL, default: https://pypi.org/simple/
+* `PROXPI_INDEX_URL`: index
+  [base](https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references)
+  URL, default: https://pypi.org/simple/
 * `PROXPI_INDEX_TTL`: index cache time-to-live in seconds,
    default: 30 minutes. Disable index-cache by setting this to 0
-* `PROXPI_EXTRA_INDEX_URLS`: extra index URLs (comma-separated)
+* `PROXPI_EXTRA_INDEX_URLS`: extra index
+  [base](https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references)
+  URLs (comma-separated)
 * `PROXPI_EXTRA_INDEX_TTLS`: corresponding extra index cache times-to-live in seconds
    (comma-separated), default: 3 minutes, cache disabled when 0
 * `PROXPI_CACHE_SIZE`: size of downloaded project files cache (bytes), default 5GB.
@@ -93,8 +95,7 @@ change in a package index.
 * `PROXPI_CACHE_DIR`: downloaded project files cache directory path, default: a new
   temporary directory
 * `PROXPI_BINARY_FILE_MIME_TYPE=1`: force file-response content-type to
-  `"application/octet-stream"` instead of letting Flask guess it. This may be needed
-  if your package installer (eg Poetry) mishandles responses with declared encoding.
+  `"application/octet-stream"` instead of letting Flask guess it
 * `PROXPI_DISABLE_INDEX_SSL_VERIFICATION=1`: don't verify any index SSL certificates
 * `PROXPI_DOWNLOAD_TIMEOUT`: time (in seconds) before `proxpi` will redirect to the
   proxied index server for file downloads instead of waiting for the download,

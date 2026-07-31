@@ -1,0 +1,11 @@
+# Development requirements
+
+# Package
+-e .[pretty]
+
+# Testing
+-r ./tests/requirements.txt
+
+# Styling
+black
+isort

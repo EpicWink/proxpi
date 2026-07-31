@@ -1,3 +1,6 @@
+hypercorn >= 0.14, < 2.0
 packaging
 pytest
 pytest-cov
+requests ~= 2.0
+starlette >= 0.29, < 2.0

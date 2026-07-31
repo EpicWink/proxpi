@@ -4,3 +4,6 @@ htmlcov/
 __pycache__/
 *.egg-info/
 .pytest_cache/
+dist/
+.idea/
+.vscode/
