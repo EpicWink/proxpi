@@ -3,12 +3,21 @@
 FROM python:3.14-alpine AS build
 
 RUN \
+    uname -a && cat /etc/issue && apk --version \
+ && apk --no-cache add git \
+ && git --version
+
+RUN \
+    --mount=type=cache,target=/root/.cache/pip \
+    uname -a && cat /etc/issue && python --version && pip --version \
+ && pip install build \
+ && python -m build --version
+
+RUN \
     --mount=type=cache,target=/root/.cache/pip \
     --mount=source=.,target=/root/src/proxpi,rw \
-    uname -a && cat /etc/issue && apk --version && python --version && pip --version \
- && apk --no-cache add git \
+    uname -a && cat /etc/issue && python --version && pip --version \
  && git -C /root/src/proxpi restore .dockerignore \
- && pip install build \
  && python -m build --outdir /srv/proxpi/dist /root/src/proxpi \
  && ls /srv/proxpi/dist
 
