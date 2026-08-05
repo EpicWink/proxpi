@@ -10,6 +10,10 @@
   v1.1, both as producer and consumer (ie project versions, and file size and
   upload-time)
 
+### Miscellaneous
+
+* Switch to [FastAPI](https://fastapi.tiangolo.com/) for web framework
+
 ## 1.3.0 - 2026-05-12
 
 ### Changes
