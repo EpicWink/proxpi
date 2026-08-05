@@ -48,4 +48,4 @@ ENTRYPOINT [ \
     "--worker-class", "asgi", \
     "proxpi.server:app" \
 ]
-CMD ["--bind", "0.0.0.0:5000", "--threads", "2", "--no-control-socket"]
+CMD ["--bind", "0.0.0.0:5000", "--no-control-socket"]

@@ -36,7 +36,7 @@ Uses a [Gunicorn](https://gunicorn.org/) WSGI server
 docker run -p 5000:5000 epicwink/proxpi
 ```
 
-Without arguments, runs with 2 threads. If passing arguments, make sure to bind to an
+If passing arguments, make sure to bind to an
 exported address (or all with `0.0.0.0`) on port 5000 (ie `--bind 0.0.0.0:5000`).
 
 ##### Compose
