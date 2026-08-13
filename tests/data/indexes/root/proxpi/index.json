@@ -7,6 +7,7 @@
       },
       "requires-python": ">=3.7",
       "size": 128,
+      "upload-time": "2099-01-01T00:00:00Z",
       "url": "proxpi-1.1.0-py3-none-any.whl"
     },
     {
@@ -16,6 +17,7 @@
       },
       "requires-python": ">=3.7",
       "size": 85,
+      "upload-time": "2020-01-01T00:00:00Z",
       "url": "proxpi-1.1.0.tar.gz"
     },
     {

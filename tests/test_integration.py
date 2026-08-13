@@ -4,6 +4,7 @@ import enum
 import hashlib
 import logging
 import pathlib
+import datetime
 import warnings
 import posixpath
 import contextlib
@@ -173,6 +174,9 @@ def clear_index_cache(server):
 
 @pytest.fixture
 def clear_projects_cache(server):
+    for project_name in proxpi.server.cache.list_projects():
+        proxpi.server.cache.invalidate_project(project_name)
+    yield
     for project_name in proxpi.server.cache.list_projects():
         proxpi.server.cache.invalidate_project(project_name)
 
@@ -421,6 +425,67 @@ def test_package_json(
             assert set(response_data["versions"]) == {"1.9.0"}
     else:
         raise RuntimeError(f"Unexpected project: {project}")
+
+
+@pytest.mark.parametrize(("unknown_setting", "expected_filenames"), [
+    pytest.param("exclude", {"proxpi-1.1.0.tar.gz"}, id="unknown_excluded"),
+    pytest.param(
+        "include",
+        {"proxpi-1.1.0.tar.gz", "proxpi-1.0.0-py3-none-any.whl", "proxpi-1.0.0.tar.gz"},
+        id="unknown_included",
+    ),
+])  # fmt: skip
+def test_package_json_exclude_newer(
+    server, clear_projects_cache, unknown_setting, expected_filenames
+):
+    """Test excluding files by upload time with the JSON API."""
+    exclude_newer_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
+    )
+    unknown_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER_UNKNOWN", unknown_setting
+    )
+    with exclude_newer_patch, unknown_patch:
+        with set_mock_index_response_is_json(_ResponseType.json):
+            response = requests.get(
+                f"{server}/index/proxpi/",
+                headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+                timeout=5,
+            )
+    assert response.status_code == 200
+    filenames = {f["filename"] for f in response.json()["files"]}
+    # future upload-time is always excluded, regardless of unknown setting
+    assert "proxpi-1.1.0-py3-none-any.whl" not in filenames
+    assert filenames == expected_filenames
+
+
+def test_package_json_exclude_newer_drops_versions(server, clear_projects_cache):
+    """Test upstream's version list is dropped once files have been excluded."""
+    exclude_newer_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
+    )
+    with exclude_newer_patch:
+        with set_mock_index_response_is_json(_ResponseType.json):
+            response = requests.get(
+                f"{server}/index/proxpi/",
+                headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+                timeout=5,
+            )
+    assert response.status_code == 200
+    assert "versions" not in response.json()
+
+
+def test_package_html_exclude_newer_unknown(server, clear_projects_cache):
+    """Test excluding files by upload time with the HTML API (all unknown)."""
+    exclude_newer_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
+    )
+    with exclude_newer_patch:
+        with set_mock_index_response_is_json(_ResponseType.html):
+            response = requests.get(f"{server}/index/proxpi/", timeout=5)
+    assert response.status_code == 200
+    parser = _utils.IndexParser.from_text(response.text)
+    assert not parser.anchors
 
 
 def test_package_unknown_accept(server):

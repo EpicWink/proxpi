@@ -9,6 +9,8 @@
 * Support [simple repository API](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
   v1.1, both as producer and consumer (ie project versions, and file size and
   upload-time)
+* Exclude recently-uploaded files with `PROXPI_EXCLUDE_NEWER` (and
+  `PROXPI_EXCLUDE_NEWER_UNKNOWN` for files with unknown upload-time)
 
 ### Miscellaneous
 
