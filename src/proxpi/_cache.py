@@ -60,7 +60,9 @@ EXCLUDE_NEWER = (
     else None
 )
 
-EXCLUDE_NEWER_UNKNOWN = os.environ.get("PROXPI_EXCLUDE_NEWER_UNKNOWN", "exclude")
+EXCLUDE_NEWER_UNKNOWN = os.environ.get(
+    "PROXPI_EXCLUDE_NEWER_UNKNOWN", ""
+).lower() not in ("","0","no","off","false")
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -70,7 +72,7 @@ _time_offset = time.time()
 
 def _is_excluded_newer(upload_time: t.Optional[str]) -> bool:
     if upload_time is None:
-        return EXCLUDE_NEWER_UNKNOWN != "include"
+        return EXCLUDE_NEWER_UNKNOWN
     uploaded_time = datetime.datetime.fromisoformat(upload_time.replace("Z", "+00:00"))
     return uploaded_time > datetime.datetime.now(datetime.timezone.utc) - EXCLUDE_NEWER
 
@@ -639,23 +641,13 @@ class _IndexCache:
             == "application/vnd.pypi.simple.v1+json"
         ):
             response_data = response.json()
-            excluded_a_file = False
             for file_data in response_data["files"]:
                 file = FileFromJSON.from_json_response(file_data, response.request.url)
-                if EXCLUDE_NEWER is not None and _is_excluded_newer(file.upload_time):
-                    excluded_a_file = True
-                    continue
                 package.files[file.name] = file
             self._packages[package_name] = package
-            if (
-                _parse_version(
-                    (response_data.get("meta") or {}).get("api-version") or "1.0",
-                )
-                >= (1, 1)
-                and not excluded_a_file
-            ):
-                # upstream's version list can't be trusted once files have been
-                # excluded, since it isn't filtered to match
+            if _parse_version(
+                (response_data.get("meta") or {}).get("api-version") or "1.0",
+            ) >= (1, 1):
                 package.versions = response_data.get("versions")
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
@@ -665,10 +657,6 @@ class _IndexCache:
         for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 file = FileFromHTML.from_html_element(child, response.request.url)
-
-                if EXCLUDE_NEWER is not None and _is_excluded_newer(file.upload_time):
-                    continue
-
                 package.files[file.name] = file
         self._packages[package_name] = package
         logger.debug(f"Finished listing files in package '{package_name}'")
@@ -1099,6 +1087,19 @@ class Cache:
 
         if not files and exc:
             raise exc
+
+        if EXCLUDE_NEWER is not None:
+            excluded_names = [
+                name
+                for name, file in files.items()
+                if _is_excluded_newer(file.upload_time)
+            ]
+            if excluded_names:
+                for name in excluded_names:
+                    del files[name]
+                # upstream's version list can't be trusted once files have been
+                # excluded, since it isn't filtered to match
+                versions = None
 
         return list(files.values()), (list(versions) if versions is not None else None)
 

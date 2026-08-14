@@ -10,7 +10,7 @@ from proxpi import _cache
 
 @pytest.mark.parametrize(("upload_time", "expected"), [
     pytest.param("2020-01-01T00:00:00Z", False, id="old_file"),
-    pytest.param(None, True, id="unknown_excluded_by_default"),
+    pytest.param(None, False, id="unknown_included_by_default"),
 ])  # fmt: skip
 def test_is_excluded_newer(upload_time, expected):
     """Test excluding files by upload time against a fixed window."""
@@ -27,11 +27,11 @@ def test_is_excluded_newer_recent_file():
         assert _cache._is_excluded_newer(upload_time) is True
 
 
-def test_is_excluded_newer_unknown_included():
-    """Test files with unknown upload time are kept when configured to."""
+def test_is_excluded_newer_unknown_excluded():
+    """Test files with unknown upload time are excluded when configured to."""
     exclude_newer_patch = mock.patch.object(
         _cache, "EXCLUDE_NEWER", datetime.timedelta(hours=1)
     )
-    unknown_patch = mock.patch.object(_cache, "EXCLUDE_NEWER_UNKNOWN", "include")
+    unknown_patch = mock.patch.object(_cache, "EXCLUDE_NEWER_UNKNOWN", True)
     with exclude_newer_patch, unknown_patch:
-        assert _cache._is_excluded_newer(None) is False
+        assert _cache._is_excluded_newer(None) is True

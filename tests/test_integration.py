@@ -428,9 +428,9 @@ def test_package_json(
 
 
 @pytest.mark.parametrize(("unknown_setting", "expected_filenames"), [
-    pytest.param("exclude", {"proxpi-1.1.0.tar.gz"}, id="unknown_excluded"),
+    pytest.param(True, {"proxpi-1.1.0.tar.gz"}, id="unknown_excluded"),
     pytest.param(
-        "include",
+        False,
         {"proxpi-1.1.0.tar.gz", "proxpi-1.0.0-py3-none-any.whl", "proxpi-1.0.0.tar.gz"},
         id="unknown_included",
     ),
@@ -475,8 +475,8 @@ def test_package_json_exclude_newer_drops_versions(server, clear_projects_cache)
     assert "versions" not in response.json()
 
 
-def test_package_html_exclude_newer_unknown(server, clear_projects_cache):
-    """Test excluding files by upload time with the HTML API (all unknown)."""
+def test_package_html_exclude_newer_unknown_default(server, clear_projects_cache):
+    """Test files with unknown upload time are kept by default (HTML API)."""
     exclude_newer_patch = mock.patch.object(
         proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
     )
@@ -485,7 +485,51 @@ def test_package_html_exclude_newer_unknown(server, clear_projects_cache):
             response = requests.get(f"{server}/index/proxpi/", timeout=5)
     assert response.status_code == 200
     parser = _utils.IndexParser.from_text(response.text)
+    assert parser.anchors
+
+
+def test_package_html_exclude_newer_unknown_excluded(server, clear_projects_cache):
+    """Test excluding files by upload time with the HTML API (all unknown)."""
+    exclude_newer_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
+    )
+    unknown_patch = mock.patch.object(
+        proxpi_server._cache, "EXCLUDE_NEWER_UNKNOWN", True
+    )
+    with exclude_newer_patch, unknown_patch:
+        with set_mock_index_response_is_json(_ResponseType.html):
+            response = requests.get(f"{server}/index/proxpi/", timeout=5)
+    assert response.status_code == 200
+    parser = _utils.IndexParser.from_text(response.text)
     assert not parser.anchors
+
+
+def test_package_json_exclude_newer_not_cached(server, clear_projects_cache):
+    """Test exclusion isn't baked into the index cache, so it can't go stale."""
+    with set_mock_index_response_is_json(_ResponseType.json):
+        response = requests.get(
+            f"{server}/index/proxpi/",
+            headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+            timeout=5,
+        )
+        assert response.status_code == 200
+        filenames = {f["filename"] for f in response.json()["files"]}
+        assert "proxpi-1.1.0-py3-none-any.whl" in filenames
+
+        # same warm cache, but exclusion is now switched on: the file must
+        # disappear immediately, without needing a fresh upstream fetch
+        exclude_newer_patch = mock.patch.object(
+            proxpi_server._cache, "EXCLUDE_NEWER", datetime.timedelta(days=365)
+        )
+        with exclude_newer_patch:
+            response = requests.get(
+                f"{server}/index/proxpi/",
+                headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+                timeout=5,
+            )
+    assert response.status_code == 200
+    filenames = {f["filename"] for f in response.json()["files"]}
+    assert "proxpi-1.1.0-py3-none-any.whl" not in filenames
 
 
 def test_package_unknown_accept(server):

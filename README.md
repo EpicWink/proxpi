@@ -111,9 +111,9 @@ change in a package index.
   `INFO`
 * `PROXPI_EXCLUDE_NEWER`: exclude files uploaded within this many seconds of the
   current time, default: none (disabled)
-* `PROXPI_EXCLUDE_NEWER_UNKNOWN`: whether to exclude files with an unknown upload-time
-  when `PROXPI_EXCLUDE_NEWER` is set, `exclude` or `include`, default: `exclude`. Note:
-  Files served via the HTML API always have an unknown upload-time
+* `PROXPI_EXCLUDE_NEWER_UNKNOWN=1`: also exclude files with an unknown upload-time when
+  `PROXPI_EXCLUDE_NEWER` is set, instead of always keeping them. Note: files served via
+  the HTML API always have an unknown upload-time
 
 ### Considerations with CI
 `proxpi` was designed with three goals (particularly for continuous integration (CI)):
