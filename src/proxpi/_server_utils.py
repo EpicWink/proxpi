@@ -3,8 +3,7 @@
 import typing as t
 
 if t.TYPE_CHECKING:
-    import fastapi.responses
-    import fastapi.templating
+    import starlette.responses
 
 
 def _parse_header_value_parameters(texts: t.Iterable[str]) -> t.List[t.Tuple[str, str]]:
@@ -99,7 +98,7 @@ def parse_accept_header(
     return get_quality
 
 
-def add_vary(header_name: str, response: "fastapi.Response") -> None:
+def add_vary(header_name: str, response: "starlette.responses.Response") -> None:
     if response.headers.get("Vary"):
         if header_name.lower() not in set(
             n.strip().lower() for n in response.headers["Vary"].split(",")
