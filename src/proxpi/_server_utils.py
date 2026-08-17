@@ -100,10 +100,4 @@ def parse_accept_header(
 
 
 def add_vary(header_name: str, response: "fastapi.Response") -> None:
-    if response.headers.get("Vary"):
-        if header_name.lower() not in set(
-            n.strip().lower() for n in response.headers["Vary"].split(",")
-        ):
-            response.headers["Vary"] += ", " + header_name
-    else:
-        response.headers["Vary"] = header_name
+    response.headers.add_vary_header(header_name)
