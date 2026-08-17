@@ -16,12 +16,6 @@
 #
 # command: pip install --only-binary :all: --python-version 3.14.7 --implementation cp --platform musllinux_1_1_aarch64 --platform musllinux_1_2_aarch64 --platform musllinux_1_1_x86_64 --platform musllinux_1_2_x86_64 --uploaded-prior-to P7D gunicorn '.[pretty]'
 
-annotated-doc==0.0.5 \
-    --hash=sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101
-    # via fastapi
-annotated-types==0.8.0 \
-    --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
-    # via pydantic
 anyio==4.14.2 \
     --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
     # via starlette
@@ -37,9 +31,6 @@ colored-traceback==0.4.2 \
     # via proxpi (setup.py)
 coloredlogs==15.0.1 \
     --hash=sha256:612ee75c546f53e92e70049c9dbfcc18c935a2b9a53b66085ce9ef6a6e5c0934
-    # via proxpi (setup.py)
-fastapi==0.141.1 \
-    --hash=sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3
     # via proxpi (setup.py)
 gunicorn==26.0.0 \
     --hash=sha256:40233d26a5f0d1872916188c276e21641155111c2853f0c2cd55260aec0d24fc
@@ -65,13 +56,6 @@ markupsafe==3.0.3 \
 packaging==26.3 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
     # via gunicorn
-pydantic==2.13.4 \
-    --hash=sha256:45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba
-    # via fastapi
-pydantic-core==2.46.4 \
-    --hash=sha256:3fb702cd90b0446a3a1c5e470bfa0dd23c0233b676a9099ddcc964fa6ca13898 \
-    --hash=sha256:372429a130e469c9cd698925ce5fc50940b7a1336b0d82038e63d5bbc4edc519
-    # via pydantic
 pygments==2.20.0 \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
     # via colored-traceback
@@ -80,19 +64,7 @@ requests==2.34.2 \
     # via proxpi (setup.py)
 starlette==1.6.0 \
     --hash=sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c
-    # via fastapi
-typing-extensions==4.16.0 \
-    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
-    # via
-    #   fastapi
-    #   pydantic
-    #   pydantic-core
-    #   typing-inspection
-typing-inspection==0.4.2 \
-    --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7
-    # via
-    #   fastapi
-    #   pydantic
+    # via proxpi (setup.py)
 urllib3==2.7.0 \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
     # via requests
