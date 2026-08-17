@@ -177,23 +177,40 @@ def clear_projects_cache(server):
         proxpi.server.cache.invalidate_project(project_name)
 
 
-@pytest.mark.parametrize("accept", ["text/html", "application/vnd.pypi.simple.v1+html"])
+@pytest.mark.parametrize(
+    "accept", ["text/html", "application/vnd.pypi.simple.v1+html", None]
+)
 @pytest.mark.parametrize(
     "index_json_response",
     [_ResponseType.html, _ResponseType.html_without_type, _ResponseType.json],
 )
-def test_list(server, accept, index_json_response, clear_index_cache):
+@pytest.mark.parametrize("accept_encoding", [
+    pytest.param(None, id="accept_enc_unspecified"),
+    pytest.param("identity", id="accept_enc_identity"),
+    pytest.param("gzip", id="accept_enc_gzip"),
+    pytest.param("gzip,identity;q=0.1", id="accept_enc_multiple"),
+])  # fmt: skip
+def test_list(server, accept, accept_encoding, index_json_response, clear_index_cache):
     """Test getting package list."""
     with set_mock_index_response_is_json(index_json_response):
-        response = requests.get(f"{server}/index/", headers={"Accept": accept})
+        response = requests.get(
+            f"{server}/index/",
+            headers={"Accept": accept, "Accept-Encoding": accept_encoding},
+        )
     response.raise_for_status()
 
     assert response.headers["Content-Type"][:9] == "text/html"
-    assert any(
-        response.headers["Content-Encoding"] == a
-        for a in ["gzip", "deflate"]
-        if a in response.request.headers["Accept-Encoding"]
-    )
+    if (
+        "Accept-Encoding" in response.request.headers
+        and response.request.headers["Accept-Encoding"] != "identity"
+    ):
+        assert any(
+            response.headers["Content-Encoding"] == a
+            for a in ["gzip", "deflate"]
+            if a in response.request.headers["Accept-Encoding"]
+        )
+    else:
+        assert not response.headers.get("Content-Encoding")
     vary = {v.strip() for v in response.headers["Vary"].split(",")}
     assert "Accept-Encoding" in vary
     assert "Accept" in vary
@@ -234,7 +251,7 @@ def test_list_json(
 
 @pytest.mark.parametrize("project", ["proxpi", "numpy", "scipy"])
 @pytest.mark.parametrize("accept", [
-    "text/html", "application/vnd.pypi.simple.v1+html", "*/*"
+    "text/html", "application/vnd.pypi.simple.v1+html", "*/*", None
 ])
 @pytest.mark.parametrize("index_json_response", [
     _ResponseType.html,

@@ -154,14 +154,15 @@ def _compress(
     if isinstance(response, str):
         response = fastapi.Response(response)
 
-    get_quality = _server_utils.parse_accept_encoding_header(
-        request.headers.get("Accept-Encoding"),
-    )
+    header_value = request.headers.get("Accept-Encoding")
+    get_quality = _server_utils.parse_accept_encoding_header(header_value)
     gzip_quality = get_quality("gzip")
     zlib_quality = get_quality("deflate")
     identity_quality = get_quality("identity")
 
-    if gzip_quality and gzip_quality >= max(identity_quality, zlib_quality):
+    if not header_value:
+        pass  # always treat unspecified header as requesting no compression
+    elif gzip_quality and gzip_quality >= max(identity_quality, zlib_quality):
         response.body = gzip.compress(response.body)
         response.headers["Content-Encoding"] = "gzip"
         response.headers["Content-Length"] = str(len(response.body))

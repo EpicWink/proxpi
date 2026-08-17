@@ -38,6 +38,9 @@ def parse_accept_encoding_header(
                 return quality
         return default
 
+    if header_value is None:
+        header_value = "*"
+
     qualities = []  # type: t.List[t.Tuple[str, t.List[t.Tuple[str, str]], float]]
     for part in header_value.split(","):
         v_value = part.strip()
@@ -75,6 +78,9 @@ def parse_accept_header(
             ):
                 return quality
         return default
+
+    if header_value is None:
+        header_value = "*/*"
 
     qualities = []  # type: t.List[t.Tuple[str, str, t.List[t.Tuple[str, str]], float]]
     for part in header_value.split(","):
