@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-    "starlette >= 0.100, < 2.0",
+    "starlette >= 0.39, < 2.0",
     'importlib-resources; python_version < "3.9"',
     "jinja2 ~= 3.0",
     "lxml >= 4.8, < 7.0",
