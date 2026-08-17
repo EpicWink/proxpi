@@ -299,7 +299,7 @@ def get_file(request: starlette.requests.Request) -> starlette.responses.Respons
 def invalidate_list(_) -> t.Dict[str, t.Any]:
     """Invalidate project list cache."""
     cache.invalidate_list()
-    return {"status": "success", "data": None}
+    return starlette.responses.JSONResponse({"status": "success", "data": None})
 
 
 @_route("/cache/{package_name}", method="DELETE")
@@ -307,9 +307,9 @@ def invalidate_package(request: starlette.requests.Request) -> t.Dict[str, t.Any
     """Invalidate project file list cache."""
     package_name = request.path_params["package_name"]
     cache.invalidate_project(package_name)
-    return {"status": "success", "data": None}
+    return starlette.responses.JSONResponse({"status": "success", "data": None})
 
 
 @_route("/health")
 def health(_) -> t.Dict[str, t.Any]:
-    return {"status": "success", "data": None}
+    return starlette.responses.JSONResponse({"status": "success", "data": None})
