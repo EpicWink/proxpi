@@ -30,7 +30,7 @@ else:  # pragma: no cover
     colored_traceback.add_hook()
 
 E = t.TypeVar("E", bound=t.Callable[
-    [starlette.requests.Request], t.Awaitable[starlette.responses.JSONResponse]
+    [starlette.requests.Request], t.Awaitable[starlette.responses.Response]
 ])  # fmt: skip
 
 logging_level = os.environ.get("PROXPI_LOGGING_LEVEL", "INFO")
