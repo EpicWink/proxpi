@@ -31,7 +31,9 @@ want more control over the environment.
 > multiple processes. The cache is thread-safe.
 
 #### Docker
-Uses a [Gunicorn](https://gunicorn.org/) WSGI server
+
+Uses a [Gunicorn](https://gunicorn.org/) ASGI server
+
 ```bash
 docker run -p 5000:5000 epicwink/proxpi
 ```
@@ -48,19 +50,23 @@ docker compose up
 #### Local
 ##### Install
 ```bash
-pip install proxpi
+pip install proxpi hypercorn
 ```
 
 Install `proxpi[pretty]` instead to get coloured logging and tracebacks (disable by
 setting environment variable `NO_COLOR=1`).
 
+`hypercorn` is used as the example [ASGI](https://asgi.readthedocs.io/en/latest/)
+server (as it's also used during testing), but feel free to
+[choose your own](https://fastapi.tiangolo.com/deployment/manually/#asgi-servers)
+
 ##### Run server
 ```bash
-FLASK_APP=proxpi.server flask run
+hypercorn proxpi.server:app
 ```
 
-See `flask run --help` for more information on address and port binding, and certificate
-specification to use HTTPS. Alternatively, bring your own WSGI server.
+See `hypercorn --help` for more information on address and port binding, and certificate
+specification to use HTTPS.
 
 ### Use proxy
 Use PIP's index-URL flag to install packages via the proxy
