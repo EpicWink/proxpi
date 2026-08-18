@@ -6,7 +6,7 @@ import http
 import zlib
 import typing as t
 import logging
-import urllib.parse
+import pathlib
 
 import jinja2
 import fastapi.responses
@@ -264,14 +264,13 @@ def get_file(package_name: str, file_name: str) -> fastapi.Response:
             status_code=http.HTTPStatus.NOT_FOUND.value,
         ) from e
 
-    scheme = urllib.parse.urlparse(path).scheme
-    if scheme and scheme != "file":
+    if not isinstance(path, pathlib.Path):
         return fastapi.responses.RedirectResponse(
             path, status_code=http.HTTPStatus.FOUND.value
         )
 
     response = fastapi.responses.FileResponse(path, media_type=_file_mime_type)
-    if path.endswith(".tar.gz") and response.media_type == "application/x-tar":
+    if path.name.endswith(".tar.gz") and response.media_type == "application/x-tar":
         response.media_type = "application/x-tar+gzip"  # keep consistent
         response.headers["Content-Type"] = "application/x-tar+gzip"
     return response
