@@ -1,79 +1,80 @@
 """Cached package index server utilities."""
 
 import typing as t
+import functools
 
 if t.TYPE_CHECKING:
+    import email.headerregistry
+
     import fastapi.responses
     import fastapi.templating
 
+    class _ContentTypeHeader(
+        email.headerregistry.ContentTypeHeader,
+        email.headerregistry.BaseHeader,
+    ):
+        pass
 
-def _parse_header_value_parameters(texts: t.Iterable[str]) -> t.List[t.Tuple[str, str]]:
-    parameters = []  # type: t.List[t.Tuple[str, str]]
-    for text in texts:
-        name, value = text.strip().split("=", maxsplit=1)
-        parameters.append((name.lower(), value))
-    return sorted(parameters, key=lambda x: x[0])
-
-
-def _pop_quality_parameter(parameters: t.List[t.Tuple[str, str]]) -> float:
-    for i, (name, value) in enumerate(parameters):
-        if name == "q":
-            parameters.pop(i)
-            return float(value)
-    return 1.0
+T = t.TypeVar("T")
 
 
+@functools.lru_cache(maxsize=None)
+def _get_content_type_class() -> t.Type["_ContentTypeHeader"]:
+    import email.headerregistry
+
+    return t.cast(
+        t.Type["_ContentTypeHeader"],
+        email.headerregistry.HeaderRegistry()["Content-Type"],
+    )
+
+
+@functools.lru_cache()
+def _parse_content_type(media_type: str) -> "_ContentTypeHeader":
+    content_type_class = _get_content_type_class()
+    return content_type_class("Content-Type", media_type)
+
+
+@functools.lru_cache()
 def parse_accept_encoding_header(
     header_value: t.Union[str, None],
 ) -> t.Callable[[str], float]:
     def get_quality(t_value: str, default: float = 0.0) -> float:
         # Parse requested media type
-        t_value, *parameter_texts = t_value.split(";")
-        t_value = t_value.lower()
-        parameters = _parse_header_value_parameters(parameter_texts)
+        c = _parse_content_type("dummy/" + t_value.strip())
 
         # Find quality
         for hv_value, hv_parameters, quality in qualities:
-            if hv_value == "*" or (t_value == hv_value and parameters == hv_parameters):
+            if hv_value == "*" or (c.subtype == hv_value and c.params == hv_parameters):
                 return quality
         return default
 
     if header_value is None:
         header_value = "*"
 
-    qualities = []  # type: t.List[t.Tuple[str, t.List[t.Tuple[str, str]], float]]
+    qualities = []  # type: t.List[t.Tuple[str, t.Mapping[str, str], float]]
     for part in header_value.split(","):
-        v_value = part.strip()
-        v_value, *v_parameter_texts = v_value.split(";")
-
-        v_parameters = _parse_header_value_parameters(v_parameter_texts)
-        v_quality = _pop_quality_parameter(v_parameters)
-
-        qualities.append((v_value.lower(), v_parameters, v_quality))
+        cth = _parse_content_type("dummy/" + part.strip())
+        qualities.append((cth.subtype, cth.params, float(cth.params.get("q", 1.0))))
 
     return get_quality
 
 
+@functools.lru_cache()
 def parse_accept_header(
     header_value: t.Union[str, None],
 ) -> t.Callable[[str], float]:
     def get_quality(media_type: str, default: float = 0.0) -> float:
         # Parse requested media type
-        media_type, *parameter_texts = media_type.split(";")
-
-        parameters = _parse_header_value_parameters(parameter_texts)
-
-        maintype, subtype = media_type.split("/", maxsplit=1)
-        maintype = maintype.lower()
-        subtype = subtype.lower()
+        c = _parse_content_type(media_type.strip())
+        c_params = {k: v for k, v in c.params.items() if k != "q"}
 
         # Find quality
         for ah_type, ah_subtype, ah_parameters, quality in qualities:
             if (ah_type == "*" and ah_subtype == "*") or (
-                maintype == ah_type
+                c.maintype == ah_type
                 and (
                     ah_subtype == "*"
-                    or (subtype == ah_subtype and parameters == ah_parameters)
+                    or (c.subtype == ah_subtype and c_params == ah_parameters)
                 )
             ):
                 return quality
@@ -82,19 +83,15 @@ def parse_accept_header(
     if header_value is None:
         header_value = "*/*"
 
-    qualities = []  # type: t.List[t.Tuple[str, str, t.List[t.Tuple[str, str]], float]]
+    qualities = []  # type: t.List[t.Tuple[str, str, t.Mapping[str, str], float]]
     for part in header_value.split(","):
-        v_media_type = part.strip()
-        v_media_type, *v_parameter_texts = v_media_type.split(";")
-
-        v_parameters = _parse_header_value_parameters(v_parameter_texts)
-        v_quality = _pop_quality_parameter(v_parameters)
-
-        v_maintype, v_subtype = v_media_type.split("/", maxsplit=1)
-        v_maintype = v_maintype.lower()
-        v_subtype = v_subtype.lower()
-
-        qualities.append((v_maintype, v_subtype, v_parameters, v_quality))
+        cth = _parse_content_type(part.strip())
+        qualities.append((
+            cth.maintype,  # ie 'text' part of 'text/plain'
+            cth.subtype,  # ie 'plain' part of 'text/plain'
+            {k: v for k, v in cth.params.items() if k != "q"},  # non-quality params
+            float(cth.params.get("q", 1.0)),  # quality
+        ))  # fmt: skip
 
     return get_quality
 
