@@ -6,8 +6,7 @@ import functools
 if t.TYPE_CHECKING:
     import email.headerregistry
 
-    import fastapi.responses
-    import fastapi.templating
+    import starlette.responses
 
     class _ContentTypeHeader(
         email.headerregistry.ContentTypeHeader,
@@ -97,5 +96,11 @@ def parse_accept_header(
     return get_quality
 
 
-def add_vary(header_name: str, response: "fastapi.Response") -> None:
-    response.headers.add_vary_header(header_name)
+def add_vary(header_name: str, response: "starlette.responses.Response") -> None:
+    if response.headers.get("Vary"):
+        if header_name.lower() not in set(
+            n.strip().lower() for n in response.headers["Vary"].split(",")
+        ):
+            response.headers["Vary"] += ", " + header_name
+    else:
+        response.headers["Vary"] = header_name

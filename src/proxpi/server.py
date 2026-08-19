@@ -9,9 +9,11 @@ import logging
 import urllib.parse
 
 import jinja2
-import fastapi.responses
-import fastapi.exceptions
-import fastapi.templating
+import starlette.requests
+import starlette.responses
+import starlette.exceptions
+import starlette.templating
+import starlette.applications
 
 from . import _cache, _server_utils
 
@@ -26,6 +28,10 @@ except ImportError:  # pragma: no cover
     pass
 else:  # pragma: no cover
     colored_traceback.add_hook()
+
+E = t.TypeVar("E", bound=t.Callable[
+    [starlette.requests.Request], t.Awaitable[starlette.responses.Response]
+])  # fmt: skip
 
 logging_level = os.environ.get("PROXPI_LOGGING_LEVEL", "INFO")
 fmt = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
@@ -64,8 +70,9 @@ else:
             pass
 
 
-app = fastapi.FastAPI(title=__package__, openapi_url=None, redirect_slashes=False)
-templates = fastapi.templating.Jinja2Templates(
+app = starlette.applications.Starlette()
+app.router.redirect_slashes = False
+templates = starlette.templating.Jinja2Templates(
     env=jinja2.Environment(loader=jinja2.PackageLoader(__package__)),
 )
 cache = _cache.Cache.from_config()
@@ -79,7 +86,15 @@ KNOWN_LATEST_JSON_VERSION = "v1"
 KNOWN_DATASET_KEYS = ["requires-python", "dist-info-metadata", "gpg-sig", "yanked"]
 
 
-def _wants_json(request: fastapi.Request, version: str = "v1") -> bool:
+def _route(url_path: str, method: str = "GET") -> t.Callable[[E], E]:
+    def add_route(endpoint: E) -> E:
+        app.add_route(url_path, route=endpoint, methods=[method])
+        return endpoint
+
+    return add_route
+
+
+def _wants_json(request: starlette.requests.Request, version: str = "v1") -> bool:
     """Determine if client wants a JSON response.
 
     First checks `format` request query paramater, and if its value is a
@@ -95,7 +110,7 @@ def _wants_json(request: fastapi.Request, version: str = "v1") -> bool:
     if version == KNOWN_LATEST_JSON_VERSION:
         try:
             wants_json = _wants_json(request, version="latest")
-        except fastapi.exceptions.HTTPException as e:
+        except starlette.exceptions.HTTPException as e:
             if e.status_code != http.HTTPStatus.NOT_ACCEPTABLE.value:
                 raise
         else:
@@ -121,7 +136,7 @@ def _wants_json(request: fastapi.Request, version: str = "v1") -> bool:
     iana_html_quality = get_quality("text/html")
 
     if not json_quality and not html_quality:
-        raise fastapi.exceptions.HTTPException(
+        raise starlette.exceptions.HTTPException(
             status_code=http.HTTPStatus.NOT_ACCEPTABLE.value,
         )
 
@@ -135,8 +150,8 @@ def _wants_json(request: fastapi.Request, version: str = "v1") -> bool:
 def _build_json_response(
     data: dict,
     version: str = "v1",
-) -> fastapi.responses.JSONResponse:
-    return fastapi.responses.JSONResponse(
+) -> starlette.responses.JSONResponse:
+    return starlette.responses.JSONResponse(
         data, media_type=f"application/vnd.pypi.simple.{version}+json"
     )
 
@@ -148,11 +163,11 @@ _file_mime_type = "application/octet-stream" if BINARY_FILE_MIME_TYPE else None
 
 
 def _compress(
-    response: t.Union[str, fastapi.Response],
-    request: fastapi.Request,
-) -> fastapi.Response:
+    response: t.Union[str, starlette.responses.Response],
+    request: starlette.requests.Request,
+) -> starlette.responses.Response:
     if isinstance(response, str):
-        response = fastapi.Response(response)
+        response = starlette.responses.Response(response)
 
     header_value = request.headers.get("Accept-Encoding")
     get_quality = _server_utils.parse_accept_encoding_header(header_value)
@@ -171,7 +186,7 @@ def _compress(
         response.headers["Content-Encoding"] = "deflate"
         response.headers["Content-Length"] = str(len(response.body))
     elif not identity_quality:
-        raise fastapi.exceptions.HTTPException(
+        raise starlette.exceptions.HTTPException(
             status_code=http.HTTPStatus.NOT_ACCEPTABLE.value,
         )
 
@@ -180,17 +195,17 @@ def _compress(
     return response
 
 
-@app.get("/")
-def index() -> fastapi.responses.FileResponse:
+@_route("/")
+def index(_) -> starlette.responses.FileResponse:
     """Home page."""
     with importlib_resources.as_file(
         importlib_resources.files(__package__) / "templates" / "index.html",
     ) as path:
-        return fastapi.responses.FileResponse(path, media_type=_file_mime_type)
+        return starlette.responses.FileResponse(path, media_type=_file_mime_type)
 
 
-@app.get("/index/")
-def list_packages(request: fastapi.Request) -> fastapi.Response:
+@_route("/index/")
+def list_packages(request: starlette.requests.Request) -> starlette.responses.Response:
     """List all projects in index(es)."""
     package_names = cache.list_projects()
 
@@ -211,13 +226,14 @@ def list_packages(request: fastapi.Request) -> fastapi.Response:
     return _compress(response, request)
 
 
-@app.get("/index/{package_name}/")
-def list_files(package_name: str, request: fastapi.Request) -> fastapi.Response:
+@_route("/index/{package_name}/")
+def list_files(request: starlette.requests.Request) -> starlette.responses.Response:
     """List all files for a project."""
+    package_name = request.path_params["package_name"]
     try:
         files, versions = cache.list_files(package_name)
     except _cache.NotFound as e:
-        raise fastapi.exceptions.HTTPException(
+        raise starlette.exceptions.HTTPException(
             status_code=http.HTTPStatus.NOT_FOUND.value,
         ) from e
 
@@ -254,43 +270,46 @@ def list_files(package_name: str, request: fastapi.Request) -> fastapi.Response:
     return _compress(response, request)
 
 
-@app.get("/index/{package_name}/{file_name}")
-def get_file(package_name: str, file_name: str) -> fastapi.Response:
+@_route("/index/{package_name}/{file_name}")
+def get_file(request: starlette.requests.Request) -> starlette.responses.Response:
     """Download a file."""
+    package_name = request.path_params["package_name"]
+    file_name = request.path_params["file_name"]
     try:
         path = cache.get_file(package_name, file_name)
     except _cache.NotFound as e:
-        raise fastapi.exceptions.HTTPException(
+        raise starlette.exceptions.HTTPException(
             status_code=http.HTTPStatus.NOT_FOUND.value,
         ) from e
 
     scheme = urllib.parse.urlparse(path).scheme
     if scheme and scheme != "file":
-        return fastapi.responses.RedirectResponse(
+        return starlette.responses.RedirectResponse(
             path, status_code=http.HTTPStatus.FOUND.value
         )
 
-    response = fastapi.responses.FileResponse(path, media_type=_file_mime_type)
+    response = starlette.responses.FileResponse(path, media_type=_file_mime_type)
     if path.endswith(".tar.gz") and response.media_type == "application/x-tar":
         response.media_type = "application/x-tar+gzip"  # keep consistent
         response.headers["Content-Type"] = "application/x-tar+gzip"
     return response
 
 
-@app.delete("/cache/list")
-def invalidate_list():
+@_route("/cache/list", method="DELETE")
+def invalidate_list(_) -> t.Dict[str, t.Any]:
     """Invalidate project list cache."""
     cache.invalidate_list()
-    return {"status": "success", "data": None}
+    return starlette.responses.JSONResponse({"status": "success", "data": None})
 
 
-@app.delete("/cache/{package_name}")
-def invalidate_package(package_name):
+@_route("/cache/{package_name}", method="DELETE")
+def invalidate_package(request: starlette.requests.Request) -> t.Dict[str, t.Any]:
     """Invalidate project file list cache."""
+    package_name = request.path_params["package_name"]
     cache.invalidate_project(package_name)
-    return {"status": "success", "data": None}
+    return starlette.responses.JSONResponse({"status": "success", "data": None})
 
 
-@app.get("/health")
-def health():
-    return {"status": "success", "data": None}
+@_route("/health")
+def health(_) -> t.Dict[str, t.Any]:
+    return starlette.responses.JSONResponse({"status": "success", "data": None})

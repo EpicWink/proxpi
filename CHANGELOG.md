@@ -12,7 +12,7 @@
 
 ### Miscellaneous
 
-* Switch to [FastAPI](https://fastapi.tiangolo.com/) for web framework
+* Switch to [Starlette](https://starlette.dev/) for web framework
 
 ## 1.3.0 - 2026-05-12
 
