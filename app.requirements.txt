@@ -5,9 +5,9 @@
 # os_name: posix
 # platform_machine: x86_64
 # platform_python_implementation: CPython
-# platform_release: 7.0.0-30-generic
+# platform_release: 7.0.0-31-generic
 # platform_system: Linux
-# platform_version: #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026
+# platform_version: #31-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 04:26:38 UTC 2026
 # python_full_version: 3.14.7
 # python_version: 3.14
 # sys_platform: linux
@@ -16,8 +16,8 @@
 #
 # command: pip install --only-binary :all: --python-version 3.14.7 --implementation cp --platform musllinux_1_1_aarch64 --platform musllinux_1_2_aarch64 --platform musllinux_1_1_x86_64 --platform musllinux_1_2_x86_64 --uploaded-prior-to P7D gunicorn '.[pretty]'
 
-anyio==4.14.2 \
-    --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
+anyio==4.15.1 \
+    --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101
     # via starlette
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
@@ -45,9 +45,9 @@ idna==3.19 \
 jinja2==3.1.6 \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
     # via proxpi (setup.py)
-lxml==6.1.2 \
-    --hash=sha256:2f3194777c0d05945ac91d8594be25d2679d1d826e01e1fc90bae568ff3a547b \
-    --hash=sha256:a5005c0c9e4d749a76a2ff8bd5918a8bb248df8e08e73a55654b9f79c9cd1e2b
+lxml==6.1.3 \
+    --hash=sha256:83e3a51e7933db700a0da0db31849db3a24022d9970da9bb73001e1d0326fd92 \
+    --hash=sha256:c59e4265608da6a041f54646ecc0c9ecdbb19aaf14c4c684bb6c2114998cc415
     # via proxpi (setup.py)
 markupsafe==3.0.3 \
     --hash=sha256:ec15a59cf5af7be74194f7ab02d0f59a62bdcf1a537677ce67a2537c9b87fcda \
@@ -62,6 +62,9 @@ requests==2.34.2 \
 starlette==1.6.0 \
     --hash=sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c
     # via proxpi (setup.py)
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+    # via anyio
 urllib3==2.7.0 \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
     # via requests
