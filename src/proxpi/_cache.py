@@ -4,9 +4,11 @@ import os
 import re
 import abc
 import time
+import pickle
 import shutil
 import typing as t
 import logging
+import sqlite3
 import tempfile
 import warnings
 import functools
@@ -14,6 +16,7 @@ import posixpath
 import threading
 import dataclasses
 import urllib.parse
+import collections.abc
 
 import requests
 import lxml.etree
@@ -40,6 +43,7 @@ EXTRA_INDEX_TTLS = [
 
 CACHE_SIZE = int(os.environ.get("PROXPI_CACHE_SIZE", 5368709120))
 CACHE_DIR = os.environ.get("PROXPI_CACHE_DIR")
+INDEX_CACHE_FILE = os.environ.get("PROXPI_INDEX_CACHE_FILE")
 DOWNLOAD_TIMEOUT = float(os.environ.get("PROXPI_DOWNLOAD_TIMEOUT", 0.9))
 
 CONNECT_TIMEOUT = (
@@ -494,6 +498,80 @@ class _ResponseReader:
             return b""
 
 
+class _PersistentDict(collections.abc.MutableMapping):
+    """Persist dict in a sqlite database.
+
+    - Keys are expected to be strings.
+    - Thread-safety must be handled by the caller.
+
+    Inspired by: https://github.com/piskvorky/sqlitedict
+    """
+
+    def __init__(self, conn: sqlite3.Connection, table_name: str) -> None:
+        self.conn = conn
+        self.table_name = table_name
+        self.encode = pickle.dumps
+        self.decode = pickle.loads
+
+    def ensure_initialised(self) -> None:
+        self.conn.execute(
+            f"CREATE TABLE IF NOT EXISTS {self.table_name} (key TEXT PRIMARY KEY, value BLOB)"
+        )
+
+    def __getitem__(self, key):
+        item = self.conn.execute(
+            f"SELECT value FROM {self.table_name} WHERE key = ?", (key,)
+        ).fetchone()
+        if item is None:
+            raise KeyError(key)
+        return self.decode(item[0])
+
+    def __contains__(self, key):
+        result = self.conn.execute(
+            f"SELECT 1 FROM {self.table_name} WHERE key = ?", (key,)
+        ).fetchone()
+        return result is not None
+
+    def __setitem__(self, key, value):
+        self.conn.execute(
+            f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
+            (key, self.encode(value)),
+        )
+        self.conn.commit()
+
+    def __delitem__(self, key):
+        if key not in self:
+            raise KeyError(key)
+
+        self.conn.execute(f"DELETE FROM {self.table_name} WHERE key = ?", (key,))
+        self.conn.commit()
+
+    def __iter__(self):
+        cursor = self.conn.execute(f"SELECT key FROM {self.table_name}")
+        return (row[0] for row in cursor)
+
+    def __len__(self):
+        return self.conn.execute(
+            f"SELECT COUNT(*) FROM {self.table_name}"
+        ).fetchone()[0]  # fmt: skip
+
+    def clear(self):
+        self.conn.execute(f"DELETE FROM {self.table_name}")
+        self.conn.commit()
+
+    def update(self, iterable):
+        if hasattr(iterable, "items"):
+            iterable = iterable.items()
+
+        iterable = ((k, self.encode(v)) for k, v in iterable)
+
+        self.conn.executemany(
+            f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
+            iterable,
+        )
+        self.conn.commit()
+
+
 class _IndexCache:
     """Cache for an index.
 
@@ -506,35 +584,65 @@ class _IndexCache:
     index_url: str
     ttl: int
     session: requests.Session
-    _index_t: t.Union[float, None]
     _index_lock: threading.Lock
     _package_locks: _Locks
-    _index: t.Dict[str, str]
-    _packages: t.Dict[str, Package]
+    _index_metadata: t.MutableMapping[str, t.Union[float, None]]
+    _index: t.MutableMapping[str, str]
+    _packages: t.MutableMapping[str, Package]
     _headers = {"Accept": (
         "application/vnd.pypi.simple.v1+json, "
         "application/vnd.pypi.simple.v1+html;q=0.1"
     )}  # fmt: skip
     _stats: _CacheStats
 
-    def __init__(self, index_url: str, ttl: int, session: requests.Session = None):
+    def __init__(
+        self,
+        index_url: str,
+        ttl: int,
+        session: requests.Session = None,
+        cache_file: t.Union[str, None] = None,
+    ):
         self.index_url = index_url
         self.ttl = ttl
         self.session = session or requests.Session()
-        self._index_t = None
         self._index_lock = threading.Lock()
         self._package_locks = _Locks()
-        self._index = {}
-        self._packages = {}
         self._index_url_masked = _mask_password(index_url)
         self._stats = _CacheStats(name=f"Index {self._index_url_masked!r}")
+
+        if cache_file is not None:
+            parsed = urllib.parse.urlparse(index_url)
+            slug = _hostname_normalise_pattern.sub(
+                "_", f"{parsed.hostname}/{parsed.path}"
+            ).strip("_")
+
+            conn = sqlite3.connect(cache_file, check_same_thread=False)
+            conn.execute("PRAGMA synchronous = NORMAL;")
+            conn.execute("PRAGMA journal_mode = WAL;")
+
+            self._index_metadata = _PersistentDict(conn, f"{slug}_metadata")
+            self._index = _PersistentDict(conn, f"{slug}_index")
+            self._packages = _PersistentDict(conn, f"{slug}_packages")
+
+            self._index_metadata.ensure_initialised()
+            self._index.ensure_initialised()
+            self._packages.ensure_initialised()
+        else:
+            self._index_metadata = {}
+            self._index = {}
+            self._packages = {}
+
+        self._index_metadata.setdefault("timestamp", None)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self._index_url_masked!r}, {self.ttl!r})"
 
     def _list_packages(self):
         """List projects using or updating cache."""
-        if self._index_t is not None and _now() < self._index_t + self.ttl:
+        if (
+            self._index_metadata["timestamp"] is not None
+            and _now() < self._index_metadata["timestamp"] + self.ttl
+        ):
             self._stats.add_hit(key="<index>")
             return
         self._stats.add_miss(key="<index>")
@@ -542,16 +650,20 @@ class _IndexCache:
         logger.info(f"Listing packages in index '{self._index_url_masked}'")
         response = self.session.get(self.index_url, headers=self._headers, stream=True)
         response.raise_for_status()
-        self._index_t = _now()
+        self._index_metadata["timestamp"] = _now()
 
         if (
             response.headers.get("Content-Type")
             == "application/vnd.pypi.simple.v1+json"
         ):
             response_data = response.json()
+
+            data = {}
             for project in response_data["projects"]:
                 name_normalised = _name_normalise_re.sub("-", project["name"]).lower()
-                self._index[name_normalised] = f"{name_normalised}/"
+                data[name_normalised] = f"{name_normalised}/"
+
+            self._index.update(data)
             logger.debug(
                 f"Finished listing packages in index '{self._index_url_masked}'",
             )
@@ -559,10 +671,14 @@ class _IndexCache:
 
         stream = _ResponseReader.from_response(response)
 
+        data = {}
         for _, child in lxml.etree.iterparse(stream, tag="a", html=True):
             if True:  # minimise Git diff
                 name = _name_normalise_re.sub("-", child.text).lower()
-                self._index[name] = child.attrib["href"]
+                data[name] = child.attrib["href"]
+
+        self._index.update(data)
+
         logger.debug(f"Finished listing packages in index '{self._index_url_masked}'")
 
     def list_packages(self) -> t.KeysView[str]:
@@ -587,9 +703,9 @@ class _IndexCache:
         Returns:
             names of projects in index
         """
-
         with self._index_lock:
             self._list_packages()
+
         return self._index.keys()
 
     def _list_files(self, package_name: str):
@@ -602,7 +718,10 @@ class _IndexCache:
 
         logger.debug(f"Listing files in package '{package_name}'")
         response = None
-        if self._index_t is None or _now() > self._index_t + self.ttl:
+        if (
+            self._index_metadata["timestamp"] is None
+            or _now() > self._index_metadata["timestamp"] + self.ttl
+        ):
             url = urllib.parse.urljoin(self.index_url, package_name)
             logger.debug(f"Refreshing '{package_name}'")
             response = self.session.get(url, headers=self._headers, stream=True)
@@ -626,11 +745,12 @@ class _IndexCache:
             for file_data in response_data["files"]:
                 file = FileFromJSON.from_json_response(file_data, response.request.url)
                 package.files[file.name] = file
-            self._packages[package_name] = package
+
             if _parse_version(
                 (response_data.get("meta") or {}).get("api-version") or "1.0",
             ) >= (1, 1):
                 package.versions = response_data.get("versions")
+            self._packages[package_name] = package
             logger.debug(f"Finished listing files in package '{package_name}'")
             return
 
@@ -655,7 +775,6 @@ class _IndexCache:
         Raises:
             NotFound: if project doesn't exist in index
         """
-
         with self._package_locks[package_name]:
             self._list_files(package_name)
         return self._packages[package_name]
@@ -696,8 +815,9 @@ class _IndexCache:
         if self._index_lock.locked():
             logger.info("Index already undergoing update")
             return
-        self._index_t = None
-        self._index = {}
+
+        self._index_metadata["timestamp"] = None
+        self._index.clear()
 
     def invalidate_package(self, package_name: str):
         """Invalidate package file list cache.
@@ -722,11 +842,11 @@ class _IndexCache:
             name: project name
         """
 
-        package_name = name
-        if self._package_locks[package_name].locked():
+        if self._package_locks[name].locked():
             logger.info(f"Project '{name}' files already undergoing update")
             return
-        self._packages.pop(package_name, None)
+
+        self._packages.pop(name, None)
 
 
 @dataclasses.dataclass
@@ -980,7 +1100,9 @@ class Cache:
         elif READ_TIMEOUT:
             session.default_timeout = (3.1, READ_TIMEOUT)
 
-        root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
+        root_cache = cls._index_cache_cls(
+            INDEX_URL, INDEX_TTL, session, INDEX_CACHE_FILE
+        )
         file_cache = cls._file_cache_cls(
             CACHE_SIZE, CACHE_DIR, DOWNLOAD_TIMEOUT, session
         )
@@ -990,7 +1112,7 @@ class Cache:
                 f"times-to-live: {len(EXTRA_INDEX_URLS)} != {len(EXTRA_INDEX_TTLS)}"
             )
         extra_caches = [
-            cls._index_cache_cls(url, ttl, session)
+            cls._index_cache_cls(url, ttl, session, INDEX_CACHE_FILE)
             for url, ttl in zip(EXTRA_INDEX_URLS, EXTRA_INDEX_TTLS)
         ]
         return cls(root_cache, file_cache, extra_caches=extra_caches)
