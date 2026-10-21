@@ -10,6 +10,10 @@
   v1.1, both as producer and consumer (ie project versions, and file size and
   upload-time)
 
+## 1.3.1 - 2026-10-21
+
+This release only updates app dependency versions.
+
 ## 1.3.0 - 2026-05-12
 
 ### Changes
