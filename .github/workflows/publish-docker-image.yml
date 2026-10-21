@@ -105,10 +105,26 @@ jobs:
 
     - name: Build image tag
       id: build-tag
-      run: echo "version=$(echo "${GITHUB_REF_NAME}"
-        | grep -Po '\d+\.\d+\.\d+(-?(a(lpha)?|b(eta)?|r?c)\.?\d+)?$'
-        || echo "${GITHUB_REF_NAME}")"
-        >> "$GITHUB_OUTPUT"
+      run: |
+        repo=epicwink/proxpi
+
+        latest_release_id="$(curl -fL \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+        | jq .name
+        )"
+        echo "latest_release_id: $latest_release_id"
+
+        version="$(echo "${GITHUB_REF_NAME}" \
+          | grep -Po '\d+\.\d+\.\d+(-?(a(lpha)?|b(eta)?|r?c)\.?\d+)?$' \
+          || echo "${GITHUB_REF_NAME}")"
+        echo "version: ${version}"
+
+        if [[ "${latest_release_id}" == "${{ github.event.release.id }}" ]]; then
+          echo "tags=$repo:$version,$repo:latest" >> "$GITHUB_OUTPUT"
+        else
+          echo "tags=$repo:$version" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Build and push image for all architectures
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -116,13 +132,4 @@ jobs:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: epicwink/proxpi:${{ steps.build-tag.outputs.version }}
-
-    - name: Release image
-      if: ${{ github.event_name == 'release' && github.event.isLatest }}
-      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: epicwink/proxpi:latest
+        tags: ${{ steps.build-tag.outputs.tags }}
