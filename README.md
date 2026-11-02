@@ -112,6 +112,10 @@ change in a package index.
 * `PROXPI_READ_TIMEOUT`: time (in seconds) `proxpi` will wait for chunks of data
   from the index server before `requests` raises a `ReadTimeout` error to prevent
   indefinite blocking, default: none, or 20 if connect-timeout provided
+* `PROXPI_INDEX_RETRIES`: number of times `proxpi` will retry a request to the
+  index server after a connection failure (eg a pooled keep-alive connection
+  reset by the index server or a NAT gateway after being idle), default: 0. HTTP
+  error responses are never retried
 * `PROXPI_LOGGING_LEVEL`: Python
   [logging level](https://docs.python.org/3/library/logging.html#levels); default:
   `INFO`

@@ -536,3 +536,71 @@ def test_download_file_representation(server, tmp_path, file_mime_type):
         assert response.headers["Content-Type"] == "application/x-tar+gzip"
         assert not response.headers.get("Content-Encoding")
     response.close()
+
+
+@contextlib.contextmanager
+def _connection_resetting_server(n_resets: int):
+    """Serve a mock index, resetting the first ``n_resets`` connections."""
+    import struct
+    import socket
+    import threading
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    n_connections = [0]
+
+    def serve():
+        while True:
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            n_connections[0] += 1
+            if n_connections[0] <= n_resets:
+                # Read the request, then send RST instead of a response
+                conn.recv(65536)
+                conn.setsockopt(
+                    socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+                )
+                conn.close()
+                continue
+            conn.recv(65536)
+            body = b'{"meta": {"api-version": "1.0"}, "projects": []}'
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: application/vnd.pypi.simple.v1+json\r\n"
+                b"Content-Length: %d\r\nConnection: close\r\n\r\n%s" % (len(body), body)
+            )
+            conn.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}/simple/", n_connections
+    finally:
+        listener.close()
+
+
+@pytest.mark.parametrize("retries", [0, 2])
+def test_index_retries(retries):
+    """Test index requests are retried on connection failures."""
+    with _connection_resetting_server(n_resets=1) as (index_url, n_connections):
+        patches = [
+            mock.patch.object(proxpi_server._cache, "INDEX_URL", index_url),
+            mock.patch.object(proxpi_server._cache, "INDEX_RETRIES", retries),
+        ]
+        with contextlib.ExitStack() as stack:
+            for patch in patches:
+                stack.enter_context(patch)
+            cache = proxpi_server._cache.Cache.from_config()
+        adapter = cache.root_cache.session.get_adapter(index_url)
+        assert adapter.max_retries.total == retries
+        if retries:
+            assert cache.list_projects() == []
+            assert n_connections[0] == 2
+        else:
+            with pytest.raises(requests.exceptions.ConnectionError):
+                cache.list_projects()
+            assert n_connections[0] == 1

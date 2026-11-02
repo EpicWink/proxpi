@@ -17,6 +17,8 @@ import urllib.parse
 
 import requests
 import lxml.etree
+import requests.adapters
+import urllib3.util.retry
 
 INDEX_URL = os.environ.get("PROXPI_INDEX_URL", "https://pypi.org/simple/")
 EXTRA_INDEX_URLS = [
@@ -52,6 +54,7 @@ READ_TIMEOUT = (
     if os.environ.get("PROXPI_READ_TIMEOUT")
     else None
 )
+INDEX_RETRIES = int(os.environ.get("PROXPI_INDEX_RETRIES", 0))
 
 logger = logging.getLogger(__name__)
 _name_normalise_re = re.compile("[-_.]+")
@@ -979,6 +982,21 @@ class Cache:
             session.default_timeout = (CONNECT_TIMEOUT, 20.0)
         elif READ_TIMEOUT:
             session.default_timeout = (3.1, READ_TIMEOUT)
+
+        if INDEX_RETRIES:
+            # Retry connection failures (including a stale pooled keep-alive
+            # connection reset by the index server or an intermediate NAT),
+            # but not HTTP error responses. Only for idempotent requests, and
+            # only ever before a response has been received.
+            retry = urllib3.util.retry.Retry(
+                total=INDEX_RETRIES,
+                allowed_methods=frozenset({"GET", "HEAD"}),
+                status_forcelist=(),
+                backoff_factor=0.1,
+            )
+            adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
 
         root_cache = cls._index_cache_cls(INDEX_URL, INDEX_TTL, session)
         file_cache = cls._file_cache_cls(

@@ -9,6 +9,7 @@
 * Support [simple repository API](https://packaging.python.org/en/latest/specifications/simple-repository-api/)
   v1.1, both as producer and consumer (ie project versions, and file size and
   upload-time)
+* Retry index requests on connection failures with `PROXPI_INDEX_RETRIES`
 
 ### Miscellaneous
 
