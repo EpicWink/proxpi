@@ -16,8 +16,9 @@
 #
 # command: pip install --only-binary :all: --python-version 3.14.8 --implementation cp --platform musllinux_1_1_aarch64 --platform musllinux_1_2_aarch64 --platform musllinux_1_1_x86_64 --platform musllinux_1_2_x86_64 --uploaded-prior-to P7D gunicorn '.[pretty]'
 
-anyio==4.15.1 \
-    --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101
+anyio==4.16.0 \
+    --hash=sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb \
+    --hash=sha256:c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026
     # via starlette
 certifi==2026.10.19 \
     --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
